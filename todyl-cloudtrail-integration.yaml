@@ -1,0 +1,256 @@
+# Run in AWS CloudFormation to deploy Todyl collection
+# for Cloud Trail log ingestion
+# Collect required values from CloudFormation Outputs
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Automated Todyl AWS CloudTrail Integration
+
+Parameters:
+  TrailName:
+    Type: String
+    Description: CloudTrail trail name (lowercase letters/numbers only)
+    AllowedPattern: '^[a-z0-9]+$'
+    Default: todylcloudtrail
+
+  BucketName:
+    Type: String
+    Description: S3 bucket name for CloudTrail logs (lowercase letters/numbers/hyphens, globally unique)
+    AllowedPattern: '^[a-z0-9-]+$'
+    Default: todyl-cloudtrail-logs
+
+  KmsAliasName:
+    Type: String
+    Description: KMS key alias (starts with 'alias/', lowercase letters/numbers/hyphens only)
+    AllowedPattern: '^alias/[a-z0-9-/]+$'
+    Default: alias/todyl-cloudtrail-key
+
+  SqsQueueName:
+    Type: String
+    Description: SQS queue name (lowercase letters/numbers/hyphens only)
+    AllowedPattern: '^[a-z0-9-]+$'
+    Default: todylforwardqueue
+
+  TodylPolicyName:
+    Type: String
+    Description: Name of the IAM policy for Todyl
+    Default: TodylCloudtrailLogIngestionPolicy
+
+Resources:
+  # Create IAM User first (no dependencies)
+  TodylUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: todylforwarduser
+
+  # Create SQS Queue (no dependencies)
+  ForwardQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Ref SqsQueueName
+      MessageRetentionPeriod: 604800  # 7 days
+
+  # Create KMS Key with updated policy
+  TrailKmsKey:
+    Type: AWS::KMS::Key
+    DependsOn: TodylUser
+    Properties:
+      Description: KMS key for Todyl CloudTrail
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EnableRootPermissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action: kms:*
+            Resource: '*'
+          - Sid: AllowCloudTrailEncryption
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action:
+              - kms:GenerateDataKey*
+              - kms:DecryptDataKey
+            Resource: '*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}'
+              StringLike:
+                kms:EncryptionContext:aws:cloudtrail:arn: !Sub 'arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/*'
+          - Sid: AllowCloudTrailLogRead
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource: '*'
+          - Sid: AllowTodylUserDecrypt
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt TodylUser.Arn
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource: '*'
+
+  TrailKmsAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Ref KmsAliasName
+      TargetKeyId: !Ref TrailKmsKey
+
+  # Create S3 Bucket with proper policy
+  TrailBucket:
+    Type: AWS::S3::Bucket
+    DependsOn: ForwardQueuePolicy
+    Properties:
+      BucketName: !Ref BucketName
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt ForwardQueue.Arn
+
+  # S3 Bucket Policy for CloudTrail
+  TrailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref TrailBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AWSCloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt TrailBucket.Arn
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}'
+          - Sid: AWSCloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${TrailBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+                AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}'
+
+  # SQS Queue Policy
+  ForwardQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ForwardQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowS3Notification
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt ForwardQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:s3:::${BucketName}'
+              StringEquals:
+                aws:SourceAccount: !Ref 'AWS::AccountId'
+
+  # CloudTrail (depends on bucket policy and KMS key)
+  CloudTrail:
+    Type: AWS::CloudTrail::Trail
+    DependsOn: 
+      - TrailBucketPolicy
+      - TrailKmsKey
+    Properties:
+      TrailName: !Ref TrailName
+      S3BucketName: !Ref TrailBucket
+      IsMultiRegionTrail: true
+      IncludeGlobalServiceEvents: true
+      EnableLogFileValidation: true
+      KMSKeyId: !GetAtt TrailKmsKey.Arn
+      IsLogging: true
+      EventSelectors:
+        - IncludeManagementEvents: true
+          ReadWriteType: All
+
+  # IAM Policy for Todyl User
+  TodylPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Ref TodylPolicyName
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: TodylCloudtrailLogIngestionPolicy
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - sqs:DeleteMessage
+              - sqs:ListQueues
+              - sqs:GetQueueAttributes
+              - sqs:ChangeMessageVisibility
+              - sqs:ReceiveMessage
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource:
+              - !Sub '${TrailBucket.Arn}/*'
+              - !GetAtt ForwardQueue.Arn
+              - !GetAtt TrailKmsKey.Arn
+      Users:
+        - !Ref TodylUser
+
+  # Access Key for Todyl User
+  TodylAccessKey:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref TodylUser
+      Status: Active
+
+Outputs:
+  QueueUrl:
+    Description: SQS Queue URL to enter in Todyl portal
+    Value: !Ref ForwardQueue
+
+  QueueArn:
+    Description: SQS Queue ARN (for reference)
+    Value: !GetAtt ForwardQueue.Arn
+
+  AccessKeyId:
+    Description: Access Key ID to enter in Todyl portal
+    Value: !Ref TodylAccessKey
+
+  SecretAccessKey:
+    Description: Secret Access Key to enter in Todyl portal (SAVE THIS - view once only!)
+    Value: !GetAtt TodylAccessKey.SecretAccessKey
+
+  TrailBucketName:
+    Description: S3 Bucket name
+    Value: !Ref TrailBucket
+
+  TrailBucketArn:
+    Description: S3 Bucket ARN (for reference)
+    Value: !GetAtt TrailBucket.Arn
+
+  TrailNameOutput:
+    Description: CloudTrail Trail name
+    Value: !Ref TrailName
+
+  KmsKeyId:
+    Description: KMS Key ID (for reference)
+    Value: !Ref TrailKmsKey
+
+  KmsKeyArn:
+    Description: KMS Key ARN (for reference)
+    Value: !GetAtt TrailKmsKey.Arn
