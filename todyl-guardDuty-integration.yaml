@@ -1,0 +1,220 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Automated Todyl AWS GuardDuty Integration - Exports findings to S3 with SQS notifications
+
+Parameters:
+  GuardDutyBucketName:
+    Type: String
+    Description: S3 bucket name for GuardDuty findings (must be globally unique, lowercase letters/numbers/hyphens only)
+    AllowedPattern: '^[a-z0-9-]+$'
+    Default: todyl-guardduty-findings
+
+  SqsQueueName:
+    Type: String
+    Description: SQS queue name (lowercase letters/numbers/hyphens only)
+    AllowedPattern: '^[a-z0-9-]+$'
+    Default: todyl-guardduty-queue
+
+  TodylPolicyName:
+    Type: String
+    Description: Name of the IAM policy for Todyl GuardDuty ingestion
+    Default: TodylGuardDutyIngestionPolicy
+
+  TodylUserName:
+    Type: String
+    Description: Existing Todyl IAM user name (from CloudTrail stack)
+    Default: todylforwarduser
+
+Resources:
+  ForwardQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Ref SqsQueueName
+      MessageRetentionPeriod: 604800
+
+  ForwardQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ForwardQueue
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowS3Notification
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt ForwardQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:s3:::${GuardDutyBucketName}'
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+
+  GuardDutyBucket:
+    Type: AWS::S3::Bucket
+    DependsOn: ForwardQueuePolicy
+    Properties:
+      BucketName: !Ref GuardDutyBucketName
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt ForwardQueue.Arn
+
+  GuardDutyBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref GuardDutyBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowGuardDutyGetBucketLocation
+            Effect: Allow
+            Principal:
+              Service: guardduty.amazonaws.com
+            Action: s3:GetBucketLocation
+            Resource: !GetAtt GuardDutyBucket.Arn
+          - Sid: AllowGuardDutyPutObject
+            Effect: Allow
+            Principal:
+              Service: guardduty.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${GuardDutyBucket.Arn}/*'
+          - Sid: DenyUnencryptedObjectUploads
+            Effect: Deny
+            Principal:
+              Service: guardduty.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${GuardDutyBucket.Arn}/*'
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption: aws:kms
+          - Sid: DenyIncorrectEncryptionHeader
+            Effect: Deny
+            Principal:
+              Service: guardduty.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${GuardDutyBucket.Arn}/*'
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption-aws-kms-key-id: !GetAtt GuardDutyKmsKey.Arn
+          - Sid: DenyNonHTTPS
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt GuardDutyBucket.Arn
+              - !Sub '${GuardDutyBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  GuardDutyKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for Todyl GuardDuty findings encryption
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: EnableRootPermissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action: kms:*
+            Resource: '*'
+          - Sid: AllowGuardDutyUseKey
+            Effect: Allow
+            Principal:
+              Service: guardduty.amazonaws.com
+            Action:
+              - kms:GenerateDataKey
+              - kms:Encrypt
+            Resource: '*'
+          - Sid: AllowTodylUserDecrypt
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:user/${TodylUserName}'
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource: '*'
+
+  GuardDutyKmsAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/todyl-guardduty-key
+      TargetKeyId: !Ref GuardDutyKmsKey
+
+  TodylPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Ref TodylPolicyName
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: TodylGuardDutyIngestionPolicy
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - sqs:DeleteMessage
+              - sqs:ListQueues
+              - sqs:GetQueueAttributes
+              - sqs:ChangeMessageVisibility
+              - sqs:ReceiveMessage
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource:
+              - !Sub '${GuardDutyBucket.Arn}'
+              - !Sub '${GuardDutyBucket.Arn}/*'
+              - !GetAtt ForwardQueue.Arn
+              - !GetAtt GuardDutyKmsKey.Arn
+      Users:
+        - !Ref TodylUserName
+
+Outputs:
+  QueueUrl:
+    Description: SQS Queue URL to enter in Todyl portal (GuardDuty integration)
+    Value: !Ref ForwardQueue
+
+  QueueArn:
+    Description: SQS Queue ARN (for reference)
+    Value: !GetAtt ForwardQueue.Arn
+
+  TodylUserName:
+    Description: IAM User name (existing user from CloudTrail stack)
+    Value: !Ref TodylUserName
+
+  GuardDutyBucketName:
+    Description: S3 Bucket name created for GuardDuty findings
+    Value: !Ref GuardDutyBucket
+
+  GuardDutyBucketArn:
+    Description: S3 Bucket ARN (needed for manual GuardDuty findings export configuration)
+    Value: !GetAtt GuardDutyBucket.Arn
+
+  KmsKeyId:
+    Description: KMS Key ID for GuardDuty encryption
+    Value: !Ref GuardDutyKmsKey
+
+  KmsKeyArn:
+    Description: KMS Key ARN (needed for GuardDuty export configuration)
+    Value: !GetAtt GuardDutyKmsKey.Arn
+
+  Instructions:
+    Description: Next manual steps required
+    Value: >
+      1. This template creates the S3 bucket, SQS queue, IAM policy (attached to existing todylforwarduser), KMS key, and notifications.
+      2. Use the SAME Access Key ID and Secret Access Key from your CloudTrail stack.
+      3. Manually enable GuardDuty (if not already enabled) in the AWS Console.
+      4. Configure GuardDuty findings export using: Bucket ARN from output above, KMS Key ARN from output above.
+         Console link: https://console.aws.amazon.com/guardduty/home#/settings
+      5. In Todyl portal, configure GuardDuty Integration with QueueUrl and your existing CloudTrail Access Key credentials.
