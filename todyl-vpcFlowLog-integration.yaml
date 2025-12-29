@@ -1,0 +1,217 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Automated Todyl AWS VPC Flow Logs Integration - Exports VPC Flow logs to S3 with SQS notifications
+
+Parameters:
+  VpcFlowBucketName:
+    Type: String
+    Description: S3 bucket name for VPC Flow logs (must be globally unique, lowercase letters/numbers/hyphens only)
+    AllowedPattern: '^[a-z0-9-]+$'
+    Default: todyl-vpcflow-logs
+
+  SqsQueueName:
+    Type: String
+    Description: SQS queue name (lowercase letters/numbers/hyphens only)
+    AllowedPattern: '^[a-z0-9-]+$'
+    Default: todyl-vpcflow-queue
+
+  TodylPolicyName:
+    Type: String
+    Description: Name of the IAM policy for Todyl VPC Flow ingestion
+    Default: TodylVPCFlowIngestionPolicy
+
+  TodylUserName:
+    Type: String
+    Description: Existing Todyl IAM user name (from CloudTrail stack)
+    Default: todylforwarduser
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Select the VPC to monitor with Flow Logs
+
+  FlowLogTrafficType:
+    Type: String
+    Description: Type of traffic to log
+    Default: ALL
+    AllowedValues:
+      - ALL
+      - ACCEPT
+      - REJECT
+
+Resources:
+  ForwardQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Ref SqsQueueName
+      MessageRetentionPeriod: 604800
+
+  ForwardQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ForwardQueue
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowS3Notification
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: SQS:SendMessage
+            Resource: !GetAtt ForwardQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:s3:::${VpcFlowBucketName}'
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+
+  VpcFlowBucket:
+    Type: AWS::S3::Bucket
+    DependsOn: ForwardQueuePolicy
+    Properties:
+      BucketName: !Ref VpcFlowBucketName
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt ForwardQueue.Arn
+
+  VpcFlowBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref VpcFlowBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AWSLogDeliveryAclCheck
+            Effect: Allow
+            Principal:
+              Service: delivery.logs.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt VpcFlowBucket.Arn
+          - Sid: AWSLogDeliveryWrite
+            Effect: Allow
+            Principal:
+              Service: delivery.logs.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${VpcFlowBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+          - Sid: DenyNonHTTPS
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt VpcFlowBucket.Arn
+              - !Sub '${VpcFlowBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  VpcFlowLogRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: vpc-flow-logs.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CloudWatchLogPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                Resource: '*'
+
+  VpcFlowLog:
+    Type: AWS::EC2::FlowLog
+    DependsOn: VpcFlowBucketPolicy
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref VpcId
+      TrafficType: !Ref FlowLogTrafficType
+      LogDestinationType: s3
+      LogDestination: !GetAtt VpcFlowBucket.Arn
+      LogFormat: '${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status}'
+      MaxAggregationInterval: 60
+      Tags:
+        - Key: Name
+          Value: Todyl-VPC-Flow-Log
+
+  TodylPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Ref TodylPolicyName
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: TodylVPCFlowIngestionPolicy
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - sqs:DeleteMessage
+              - sqs:ListQueues
+              - sqs:GetQueueAttributes
+              - sqs:ChangeMessageVisibility
+              - sqs:ReceiveMessage
+              - kms:Decrypt
+            Resource:
+              - !Sub '${VpcFlowBucket.Arn}'
+              - !Sub '${VpcFlowBucket.Arn}/*'
+              - !GetAtt ForwardQueue.Arn
+      Users:
+        - !Ref TodylUserName
+
+Outputs:
+  QueueUrl:
+    Description: SQS Queue URL to enter in Todyl portal (VPC Flow integration)
+    Value: !Ref ForwardQueue
+
+  QueueArn:
+    Description: SQS Queue ARN (for reference)
+    Value: !GetAtt ForwardQueue.Arn
+
+  TodylUserName:
+    Description: IAM User name (existing user from CloudTrail stack)
+    Value: !Ref TodylUserName
+
+  VpcFlowBucketName:
+    Description: S3 Bucket name created for VPC Flow logs
+    Value: !Ref VpcFlowBucket
+
+  VpcFlowBucketArn:
+    Description: S3 Bucket ARN (for reference)
+    Value: !GetAtt VpcFlowBucket.Arn
+
+  VpcFlowLogId:
+    Description: VPC Flow Log ID
+    Value: !Ref VpcFlowLog
+
+  MonitoredVpcId:
+    Description: VPC ID being monitored
+    Value: !Ref VpcId
+
+  Instructions:
+    Description: Next steps to complete setup
+    Value: >
+      1. This template creates the S3 bucket, SQS queue, VPC Flow Log, and IAM policy (attached to existing todylforwarduser).
+      2. Use the SAME Access Key ID and Secret Access Key from your CloudTrail stack.
+      3. VPC Flow Logs are now being exported to the S3 bucket automatically.
+      4. In Todyl portal, configure VPC Flow Integration with QueueUrl and your existing CloudTrail Access Key credentials.
+      5. If you need to monitor additional VPCs, deploy this stack again with a different VpcId parameter.
