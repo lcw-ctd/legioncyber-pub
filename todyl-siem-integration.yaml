@@ -1,0 +1,759 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Todyl SIEM Integration - Consolidated single-stack template.
+  CloudTrail (always deployed), GuardDuty (optional), VPC Flow Logs (optional).
+  Resolves cross-stack drift, fragile coupling, missing encryption, and secret exposure issues.  Created by Legion Cyberworks LLC.
+
+Parameters:
+  # ========================================
+  # CLOUDTRAIL (always on)
+  # ========================================
+  TrailName:
+    Type: String
+    Description: CloudTrail trail name (lowercase letters/numbers only)
+    AllowedPattern: '^[a-z0-9]+$'
+    Default: todylcloudtrail
+
+  CloudTrailBucketName:
+    Type: String
+    Description: S3 bucket name for CloudTrail logs (globally unique, lowercase letters/numbers/hyphens)
+    AllowedPattern: '^[a-z0-9-]+$'
+    Default: todyl-cloudtrail-logs
+
+  CloudTrailKmsAliasName:
+    Type: String
+    Description: KMS key alias for CloudTrail
+    AllowedPattern: '^alias/[a-z0-9-/]+$'
+    Default: alias/todyl-cloudtrail-key
+
+  CloudTrailQueueName:
+    Type: String
+    Description: SQS queue name for CloudTrail notifications
+    AllowedPattern: '^[a-z0-9-]+$'
+    Default: todylforwardqueue
+
+  # ========================================
+  # GUARDDUTY (optional)
+  # ========================================
+  EnableGuardDuty:
+    Type: String
+    Description: Set to true to deploy GuardDuty findings export
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+
+  GuardDutyBucketName:
+    Type: String
+    Description: S3 bucket name for GuardDuty findings (globally unique, lowercase letters/numbers/hyphens)
+    AllowedPattern: '^[a-z0-9-]+$'
+    Default: todyl-guardduty-findings
+
+  GuardDutyQueueName:
+    Type: String
+    Description: SQS queue name for GuardDuty notifications
+    AllowedPattern: '^[a-z0-9-]+$'
+    Default: todyl-guardduty-queue
+
+  # ========================================
+  # RETENTION
+  # ========================================
+  LogRetentionDays:
+    Type: Number
+    Description: Number of days to retain logs in S3 before expiration (Todyl retains for 1 year)
+    Default: 60
+    MinValue: 1
+    MaxValue: 365
+
+  # ========================================
+  # VPC FLOW LOGS (optional)
+  # ========================================
+  EnableVpcFlowLogs:
+    Type: String
+    Description: Set to true to deploy VPC Flow Log export
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+
+  VpcFlowBucketName:
+    Type: String
+    Description: S3 bucket name for VPC Flow logs (globally unique, lowercase letters/numbers/hyphens)
+    AllowedPattern: '^[a-z0-9-]+$'
+    Default: todyl-vpcflow-logs
+
+  VpcFlowQueueName:
+    Type: String
+    Description: SQS queue name for VPC Flow Log notifications
+    AllowedPattern: '^[a-z0-9-]+$'
+    Default: todyl-vpcflow-queue
+
+  VpcId:
+    Type: String
+    Description: VPC ID to monitor with Flow Logs (required if EnableVpcFlowLogs is true)
+    AllowedPattern: '^(vpc-[a-z0-9]+)?$'
+    Default: ''
+
+  FlowLogTrafficType:
+    Type: String
+    Description: Type of VPC traffic to log
+    Default: ALL
+    AllowedValues:
+      - ALL
+      - ACCEPT
+      - REJECT
+
+Conditions:
+  DeployGuardDuty: !Equals [!Ref EnableGuardDuty, 'true']
+  DeployVpcFlowLogs: !Equals [!Ref EnableVpcFlowLogs, 'true']
+
+Resources:
+  # ========================================
+  # SHARED IAM (always created)
+  # ========================================
+  TodylUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: todylforwarduser
+
+  TodylAccessKey:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref TodylUser
+      Status: Active
+
+  TodylAccessKeySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: todyl/access-key
+      Description: Todyl integration IAM credentials (AccessKeyId + SecretAccessKey)
+      SecretString: !Sub |
+        {
+          "AccessKeyId": "${TodylAccessKey}",
+          "SecretAccessKey": "${TodylAccessKey.SecretAccessKey}"
+        }
+
+  # ========================================
+  # CLOUDTRAIL (always created)
+  # ========================================
+  CloudTrailQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Ref CloudTrailQueueName
+      MessageRetentionPeriod: 604800
+
+  CloudTrailQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref CloudTrailQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowS3Notification
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt CloudTrailQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:s3:::${CloudTrailBucketName}'
+              StringEquals:
+                aws:SourceAccount: !Ref 'AWS::AccountId'
+
+  CloudTrailKmsKey:
+    Type: AWS::KMS::Key
+    DependsOn: TodylUser
+    Properties:
+      Description: KMS key for Todyl CloudTrail
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EnableRootPermissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action: kms:*
+            Resource: '*'
+          - Sid: AllowCloudTrailEncryption
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action:
+              - kms:GenerateDataKey*
+            Resource: '*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}'
+              StringLike:
+                kms:EncryptionContext:aws:cloudtrail:arn: !Sub 'arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/*'
+          - Sid: AllowCloudTrailLogRead
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource: '*'
+          - Sid: AllowTodylUserDecrypt
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt TodylUser.Arn
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource: '*'
+
+  CloudTrailKmsAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Ref CloudTrailKmsAliasName
+      TargetKeyId: !Ref CloudTrailKmsKey
+
+  CloudTrailBucket:
+    Type: AWS::S3::Bucket
+    DependsOn: CloudTrailQueuePolicy
+    Properties:
+      BucketName: !Ref CloudTrailBucketName
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt CloudTrailKmsKey.Arn
+            BucketKeyEnabled: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireAfter60Days
+            Status: Enabled
+            ExpirationInDays: !Ref LogRetentionDays
+            NoncurrentVersionExpiration:
+              NoncurrentDays: !Ref LogRetentionDays
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt CloudTrailQueue.Arn
+
+  CloudTrailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref CloudTrailBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AWSCloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt CloudTrailBucket.Arn
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}'
+          - Sid: AWSCloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${CloudTrailBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+                AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}'
+          - Sid: DenyNonHTTPS
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt CloudTrailBucket.Arn
+              - !Sub '${CloudTrailBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  CloudTrail:
+    Type: AWS::CloudTrail::Trail
+    DependsOn:
+      - CloudTrailBucketPolicy
+      - CloudTrailKmsKey
+    Properties:
+      TrailName: !Ref TrailName
+      S3BucketName: !Ref CloudTrailBucket
+      IsMultiRegionTrail: true
+      IncludeGlobalServiceEvents: true
+      EnableLogFileValidation: true
+      KMSKeyId: !GetAtt CloudTrailKmsKey.Arn
+      IsLogging: true
+      EventSelectors:
+        - IncludeManagementEvents: true
+          ReadWriteType: All
+
+  CloudTrailManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: TodylCloudTrailIngestionPolicy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: TodylCloudtrailLogIngestionPolicy
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - sqs:DeleteMessage
+              - sqs:GetQueueUrl
+              - sqs:GetQueueAttributes
+              - sqs:ChangeMessageVisibility
+              - sqs:ReceiveMessage
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource:
+              - !Sub '${CloudTrailBucket.Arn}/*'
+              - !GetAtt CloudTrailQueue.Arn
+              - !GetAtt CloudTrailKmsKey.Arn
+      Users:
+        - !Ref TodylUser
+
+  # ========================================
+  # GUARDDUTY (conditional)
+  # ========================================
+  GuardDutyQueue:
+    Type: AWS::SQS::Queue
+    Condition: DeployGuardDuty
+    Properties:
+      QueueName: !Ref GuardDutyQueueName
+      MessageRetentionPeriod: 604800
+
+  GuardDutyQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Condition: DeployGuardDuty
+    Properties:
+      Queues:
+        - !Ref GuardDutyQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowS3Notification
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt GuardDutyQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:s3:::${GuardDutyBucketName}'
+              StringEquals:
+                aws:SourceAccount: !Ref 'AWS::AccountId'
+
+  GuardDutyKmsKey:
+    Type: AWS::KMS::Key
+    Condition: DeployGuardDuty
+    DependsOn: TodylUser
+    Properties:
+      Description: KMS key for Todyl GuardDuty findings encryption
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EnableRootPermissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action: kms:*
+            Resource: '*'
+          - Sid: AllowGuardDutyUseKey
+            Effect: Allow
+            Principal:
+              Service: guardduty.amazonaws.com
+            Action:
+              - kms:GenerateDataKey
+              - kms:Encrypt
+            Resource: '*'
+          - Sid: AllowTodylUserDecrypt
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt TodylUser.Arn
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource: '*'
+
+  GuardDutyKmsAlias:
+    Type: AWS::KMS::Alias
+    Condition: DeployGuardDuty
+    Properties:
+      AliasName: alias/todyl-guardduty-key
+      TargetKeyId: !Ref GuardDutyKmsKey
+
+  GuardDutyBucket:
+    Type: AWS::S3::Bucket
+    Condition: DeployGuardDuty
+    DependsOn: GuardDutyQueuePolicy
+    Properties:
+      BucketName: !Ref GuardDutyBucketName
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt GuardDutyKmsKey.Arn
+            BucketKeyEnabled: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireAfter60Days
+            Status: Enabled
+            ExpirationInDays: !Ref LogRetentionDays
+            NoncurrentVersionExpiration:
+              NoncurrentDays: !Ref LogRetentionDays
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt GuardDutyQueue.Arn
+
+  GuardDutyBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: DeployGuardDuty
+    Properties:
+      Bucket: !Ref GuardDutyBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowGuardDutyGetBucketLocation
+            Effect: Allow
+            Principal:
+              Service: guardduty.amazonaws.com
+            Action: s3:GetBucketLocation
+            Resource: !GetAtt GuardDutyBucket.Arn
+          - Sid: AllowGuardDutyPutObject
+            Effect: Allow
+            Principal:
+              Service: guardduty.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${GuardDutyBucket.Arn}/*'
+          - Sid: DenyUnencryptedObjectUploads
+            Effect: Deny
+            Principal:
+              Service: guardduty.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${GuardDutyBucket.Arn}/*'
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption: aws:kms
+          - Sid: DenyIncorrectEncryptionHeader
+            Effect: Deny
+            Principal:
+              Service: guardduty.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${GuardDutyBucket.Arn}/*'
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption-aws-kms-key-id: !GetAtt GuardDutyKmsKey.Arn
+          - Sid: DenyNonHTTPS
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt GuardDutyBucket.Arn
+              - !Sub '${GuardDutyBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  GuardDutyManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: DeployGuardDuty
+    Properties:
+      ManagedPolicyName: TodylGuardDutyIngestionPolicy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: TodylGuardDutyIngestionPolicy
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - sqs:DeleteMessage
+              - sqs:GetQueueUrl
+              - sqs:GetQueueAttributes
+              - sqs:ChangeMessageVisibility
+              - sqs:ReceiveMessage
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource:
+              - !Sub '${GuardDutyBucket.Arn}'
+              - !Sub '${GuardDutyBucket.Arn}/*'
+              - !GetAtt GuardDutyQueue.Arn
+              - !GetAtt GuardDutyKmsKey.Arn
+      Users:
+        - !Ref TodylUser
+
+  # ========================================
+  # VPC FLOW LOGS (conditional)
+  # ========================================
+  VpcFlowQueue:
+    Type: AWS::SQS::Queue
+    Condition: DeployVpcFlowLogs
+    Properties:
+      QueueName: !Ref VpcFlowQueueName
+      MessageRetentionPeriod: 604800
+
+  VpcFlowQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Condition: DeployVpcFlowLogs
+    Properties:
+      Queues:
+        - !Ref VpcFlowQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowS3Notification
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt VpcFlowQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:s3:::${VpcFlowBucketName}'
+              StringEquals:
+                aws:SourceAccount: !Ref 'AWS::AccountId'
+
+  VpcFlowKmsKey:
+    Type: AWS::KMS::Key
+    Condition: DeployVpcFlowLogs
+    DependsOn: TodylUser
+    Properties:
+      Description: KMS key for Todyl VPC Flow Logs encryption
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EnableRootPermissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action: kms:*
+            Resource: '*'
+          - Sid: AllowVpcFlowLogDelivery
+            Effect: Allow
+            Principal:
+              Service: delivery.logs.amazonaws.com
+            Action:
+              - kms:GenerateDataKey
+              - kms:Encrypt
+            Resource: '*'
+          - Sid: AllowTodylUserDecrypt
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt TodylUser.Arn
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource: '*'
+
+  VpcFlowKmsAlias:
+    Type: AWS::KMS::Alias
+    Condition: DeployVpcFlowLogs
+    Properties:
+      AliasName: alias/todyl-vpcflow-key
+      TargetKeyId: !Ref VpcFlowKmsKey
+
+  VpcFlowBucket:
+    Type: AWS::S3::Bucket
+    Condition: DeployVpcFlowLogs
+    DependsOn: VpcFlowQueuePolicy
+    Properties:
+      BucketName: !Ref VpcFlowBucketName
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt VpcFlowKmsKey.Arn
+            BucketKeyEnabled: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireAfter60Days
+            Status: Enabled
+            ExpirationInDays: !Ref LogRetentionDays
+            NoncurrentVersionExpiration:
+              NoncurrentDays: !Ref LogRetentionDays
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt VpcFlowQueue.Arn
+
+  VpcFlowBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: DeployVpcFlowLogs
+    Properties:
+      Bucket: !Ref VpcFlowBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AWSLogDeliveryAclCheck
+            Effect: Allow
+            Principal:
+              Service: delivery.logs.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt VpcFlowBucket.Arn
+          - Sid: AWSLogDeliveryWrite
+            Effect: Allow
+            Principal:
+              Service: delivery.logs.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${VpcFlowBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+          - Sid: DenyNonHTTPS
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt VpcFlowBucket.Arn
+              - !Sub '${VpcFlowBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  VpcFlowLog:
+    Type: AWS::EC2::FlowLog
+    Condition: DeployVpcFlowLogs
+    DependsOn: VpcFlowBucketPolicy
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref VpcId
+      TrafficType: !Ref FlowLogTrafficType
+      LogDestinationType: s3
+      LogDestination: !GetAtt VpcFlowBucket.Arn
+      LogFormat: '${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status}'
+      MaxAggregationInterval: 60
+      Tags:
+        - Key: Name
+          Value: Todyl-VPC-Flow-Log
+
+  VpcFlowLogsManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: DeployVpcFlowLogs
+    Properties:
+      ManagedPolicyName: TodylVpcFlowIngestionPolicy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: TodylVpcFlowIngestionPolicy
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - sqs:DeleteMessage
+              - sqs:GetQueueUrl
+              - sqs:GetQueueAttributes
+              - sqs:ChangeMessageVisibility
+              - sqs:ReceiveMessage
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource:
+              - !Sub '${VpcFlowBucket.Arn}'
+              - !Sub '${VpcFlowBucket.Arn}/*'
+              - !GetAtt VpcFlowQueue.Arn
+              - !GetAtt VpcFlowKmsKey.Arn
+      Users:
+        - !Ref TodylUser
+
+Outputs:
+  # ========================================
+  # CREDENTIALS (single set for all services)
+  # ========================================
+  CredentialsSecretArn:
+    Description: Secrets Manager ARN containing Todyl access credentials (AccessKeyId + SecretAccessKey)
+    Value: !Ref TodylAccessKeySecret
+
+  TodylUserArn:
+    Description: Todyl IAM User ARN
+    Value: !GetAtt TodylUser.Arn
+
+  # ========================================
+  # CLOUDTRAIL QUEUE (always present)
+  # ========================================
+  CloudTrailQueueUrl:
+    Description: CloudTrail SQS Queue URL for Todyl portal
+    Value: !Ref CloudTrailQueue
+
+  CloudTrailQueueArn:
+    Description: CloudTrail SQS Queue ARN
+    Value: !GetAtt CloudTrailQueue.Arn
+
+  CloudTrailBucketArn:
+    Description: CloudTrail S3 Bucket ARN
+    Value: !GetAtt CloudTrailBucket.Arn
+
+  CloudTrailKmsKeyArn:
+    Description: CloudTrail KMS Key ARN
+    Value: !GetAtt CloudTrailKmsKey.Arn
+
+  # ========================================
+  # GUARDDUTY QUEUE (conditional)
+  # ========================================
+  GuardDutyQueueUrl:
+    Condition: DeployGuardDuty
+    Description: GuardDuty SQS Queue URL for Todyl portal
+    Value: !Ref GuardDutyQueue
+
+  GuardDutyQueueArn:
+    Condition: DeployGuardDuty
+    Description: GuardDuty SQS Queue ARN
+    Value: !GetAtt GuardDutyQueue.Arn
+
+  GuardDutyBucketArn:
+    Condition: DeployGuardDuty
+    Description: GuardDuty S3 Bucket ARN (needed for manual GuardDuty export configuration)
+    Value: !GetAtt GuardDutyBucket.Arn
+
+  GuardDutyKmsKeyArn:
+    Condition: DeployGuardDuty
+    Description: GuardDuty KMS Key ARN (needed for GuardDuty export configuration)
+    Value: !GetAtt GuardDutyKmsKey.Arn
+
+  # ========================================
+  # VPC FLOW LOGS QUEUE (conditional)
+  # ========================================
+  VpcFlowQueueUrl:
+    Condition: DeployVpcFlowLogs
+    Description: VPC Flow Logs SQS Queue URL for Todyl portal
+    Value: !Ref VpcFlowQueue
+
+  VpcFlowQueueArn:
+    Condition: DeployVpcFlowLogs
+    Description: VPC Flow Logs SQS Queue ARN
+    Value: !GetAtt VpcFlowQueue.Arn
+
+  VpcFlowBucketArn:
+    Condition: DeployVpcFlowLogs
+    Description: VPC Flow Logs S3 Bucket ARN
+    Value: !GetAtt VpcFlowBucket.Arn
+
+  VpcFlowKmsKeyArn:
+    Condition: DeployVpcFlowLogs
+    Description: VPC Flow Logs KMS Key ARN
+    Value: !GetAtt VpcFlowKmsKey.Arn
+
+  VpcFlowLogId:
+    Condition: DeployVpcFlowLogs
+    Description: VPC Flow Log ID
+    Value: !Ref VpcFlowLog
