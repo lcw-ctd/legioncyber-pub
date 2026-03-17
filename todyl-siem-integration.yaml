@@ -1,8 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Todyl SIEM Integration - Consolidated single-stack template.
-  CloudTrail (always deployed), GuardDuty (optional), VPC Flow Logs (optional).
-  Resolves cross-stack drift, fragile coupling, missing encryption, and secret exposure issues.  Created by Legion Cyberworks LLC.
+  Todyl SIEM Integration - Unified single-stack template (deploy once per account).
+  CloudTrail (always), GuardDuty (optional), VPC Flow Logs (optional, up to 10 VPCs).
+  All S3 lifecycle rules managed here — no external Terraform lifecycle config needed.
 
 Parameters:
   # ========================================
@@ -16,9 +16,8 @@ Parameters:
 
   CloudTrailBucketName:
     Type: String
-    Description: S3 bucket name for CloudTrail logs (globally unique, lowercase letters/numbers/hyphens)
+    Description: S3 bucket name for CloudTrail logs (must be globally unique — include account ID, e.g. todyl-cloudtrail-829695622445)
     AllowedPattern: '^[a-z0-9-]+$'
-    Default: todyl-cloudtrail-logs
 
   CloudTrailKmsAliasName:
     Type: String
@@ -32,6 +31,12 @@ Parameters:
     AllowedPattern: '^[a-z0-9-]+$'
     Default: todylforwardqueue
 
+  TodylUserName:
+    Type: String
+    Description: IAM user name for Todyl integration
+    AllowedPattern: '^[a-zA-Z0-9+=,.@_-]+$'
+    Default: todylforwarduser
+
   # ========================================
   # GUARDDUTY (optional)
   # ========================================
@@ -43,9 +48,8 @@ Parameters:
 
   GuardDutyBucketName:
     Type: String
-    Description: S3 bucket name for GuardDuty findings (globally unique, lowercase letters/numbers/hyphens)
+    Description: S3 bucket name for GuardDuty findings (must be globally unique — include account ID, e.g. todyl-guardduty-829695622445)
     AllowedPattern: '^[a-z0-9-]+$'
-    Default: todyl-guardduty-findings
 
   GuardDutyQueueName:
     Type: String
@@ -54,17 +58,7 @@ Parameters:
     Default: todyl-guardduty-queue
 
   # ========================================
-  # RETENTION
-  # ========================================
-  LogRetentionDays:
-    Type: Number
-    Description: Number of days to retain logs in S3 before expiration (Todyl retains for 1 year)
-    Default: 60
-    MinValue: 1
-    MaxValue: 365
-
-  # ========================================
-  # VPC FLOW LOGS (optional)
+  # VPC FLOW LOGS (optional, up to 10 VPCs)
   # ========================================
   EnableVpcFlowLogs:
     Type: String
@@ -74,9 +68,8 @@ Parameters:
 
   VpcFlowBucketName:
     Type: String
-    Description: S3 bucket name for VPC Flow logs (globally unique, lowercase letters/numbers/hyphens)
+    Description: S3 bucket name for VPC Flow logs (must be globally unique — include account ID, e.g. todyl-vpcflow-829695622445)
     AllowedPattern: '^[a-z0-9-]+$'
-    Default: todyl-vpcflow-logs
 
   VpcFlowQueueName:
     Type: String
@@ -84,9 +77,63 @@ Parameters:
     AllowedPattern: '^[a-z0-9-]+$'
     Default: todyl-vpcflow-queue
 
-  VpcId:
+  VpcId1:
     Type: String
-    Description: VPC ID to monitor with Flow Logs (required if EnableVpcFlowLogs is true)
+    Description: First VPC ID to monitor (required if EnableVpcFlowLogs is true)
+    AllowedPattern: '^(vpc-[a-z0-9]+)?$'
+    Default: ''
+
+  VpcId2:
+    Type: String
+    Description: Second VPC ID to monitor (optional)
+    AllowedPattern: '^(vpc-[a-z0-9]+)?$'
+    Default: ''
+
+  VpcId3:
+    Type: String
+    Description: Third VPC ID to monitor (optional)
+    AllowedPattern: '^(vpc-[a-z0-9]+)?$'
+    Default: ''
+
+  VpcId4:
+    Type: String
+    Description: Fourth VPC ID to monitor (optional)
+    AllowedPattern: '^(vpc-[a-z0-9]+)?$'
+    Default: ''
+
+  VpcId5:
+    Type: String
+    Description: Fifth VPC ID to monitor (optional)
+    AllowedPattern: '^(vpc-[a-z0-9]+)?$'
+    Default: ''
+
+  VpcId6:
+    Type: String
+    Description: Sixth VPC ID to monitor (optional)
+    AllowedPattern: '^(vpc-[a-z0-9]+)?$'
+    Default: ''
+
+  VpcId7:
+    Type: String
+    Description: Seventh VPC ID to monitor (optional)
+    AllowedPattern: '^(vpc-[a-z0-9]+)?$'
+    Default: ''
+
+  VpcId8:
+    Type: String
+    Description: Eighth VPC ID to monitor (optional)
+    AllowedPattern: '^(vpc-[a-z0-9]+)?$'
+    Default: ''
+
+  VpcId9:
+    Type: String
+    Description: Ninth VPC ID to monitor (optional)
+    AllowedPattern: '^(vpc-[a-z0-9]+)?$'
+    Default: ''
+
+  VpcId10:
+    Type: String
+    Description: Tenth VPC ID to monitor (optional)
     AllowedPattern: '^(vpc-[a-z0-9]+)?$'
     Default: ''
 
@@ -99,9 +146,66 @@ Parameters:
       - ACCEPT
       - REJECT
 
+  # ========================================
+  # S3 LIFECYCLE
+  # ========================================
+  LogRetentionDays:
+    Type: Number
+    Description: Days to retain logs in S3 before expiration (applies to all buckets)
+    Default: 60
+    MinValue: 1
+    MaxValue: 365
+
+  # ========================================
+  # SQS CONFIGURATION
+  # ========================================
+  SqsMessageRetentionSeconds:
+    Type: Number
+    Description: SQS message retention period in seconds (applies to all queues)
+    Default: 604800
+    MinValue: 60
+    MaxValue: 1209600
+
+  SqsVisibilityTimeoutSeconds:
+    Type: Number
+    Description: SQS visibility timeout in seconds (applies to all queues)
+    Default: 30
+    MinValue: 0
+    MaxValue: 43200
+
 Conditions:
   DeployGuardDuty: !Equals [!Ref EnableGuardDuty, 'true']
   DeployVpcFlowLogs: !Equals [!Ref EnableVpcFlowLogs, 'true']
+  DeployVpc1: !And
+    - !Condition DeployVpcFlowLogs
+    - !Not [!Equals [!Ref VpcId1, '']]
+  DeployVpc2: !And
+    - !Condition DeployVpcFlowLogs
+    - !Not [!Equals [!Ref VpcId2, '']]
+  DeployVpc3: !And
+    - !Condition DeployVpcFlowLogs
+    - !Not [!Equals [!Ref VpcId3, '']]
+  DeployVpc4: !And
+    - !Condition DeployVpcFlowLogs
+    - !Not [!Equals [!Ref VpcId4, '']]
+  DeployVpc5: !And
+    - !Condition DeployVpcFlowLogs
+    - !Not [!Equals [!Ref VpcId5, '']]
+  DeployVpc6: !And
+    - !Condition DeployVpcFlowLogs
+    - !Not [!Equals [!Ref VpcId6, '']]
+  DeployVpc7: !And
+    - !Condition DeployVpcFlowLogs
+    - !Not [!Equals [!Ref VpcId7, '']]
+  DeployVpc8: !And
+    - !Condition DeployVpcFlowLogs
+    - !Not [!Equals [!Ref VpcId8, '']]
+  DeployVpc9: !And
+    - !Condition DeployVpcFlowLogs
+    - !Not [!Equals [!Ref VpcId9, '']]
+  DeployVpc10: !And
+    - !Condition DeployVpcFlowLogs
+    - !Not [!Equals [!Ref VpcId10, '']]
 
 Resources:
   # ========================================
@@ -110,7 +214,7 @@ Resources:
   TodylUser:
     Type: AWS::IAM::User
     Properties:
-      UserName: todylforwarduser
+      UserName: !Ref TodylUserName
 
   TodylAccessKey:
     Type: AWS::IAM::AccessKey
@@ -136,7 +240,8 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Ref CloudTrailQueueName
-      MessageRetentionPeriod: 604800
+      MessageRetentionPeriod: !Ref SqsMessageRetentionSeconds
+      VisibilityTimeout: !Ref SqsVisibilityTimeoutSeconds
 
   CloudTrailQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -223,7 +328,7 @@ Resources:
             BucketKeyEnabled: true
       LifecycleConfiguration:
         Rules:
-          - Id: ExpireAfter60Days
+          - Id: ExpireLogs
             Status: Enabled
             ExpirationInDays: !Ref LogRetentionDays
             NoncurrentVersionExpiration:
@@ -325,7 +430,8 @@ Resources:
     Condition: DeployGuardDuty
     Properties:
       QueueName: !Ref GuardDutyQueueName
-      MessageRetentionPeriod: 604800
+      MessageRetentionPeriod: !Ref SqsMessageRetentionSeconds
+      VisibilityTimeout: !Ref SqsVisibilityTimeoutSeconds
 
   GuardDutyQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -404,7 +510,7 @@ Resources:
             BucketKeyEnabled: true
       LifecycleConfiguration:
         Rules:
-          - Id: ExpireAfter60Days
+          - Id: ExpireLogs
             Status: Enabled
             ExpirationInDays: !Ref LogRetentionDays
             NoncurrentVersionExpiration:
@@ -497,14 +603,17 @@ Resources:
         - !Ref TodylUser
 
   # ========================================
-  # VPC FLOW LOGS (conditional)
+  # VPC FLOW LOGS — shared infrastructure
+  # One S3 bucket + SQS queue + KMS key shared across all VPCs.
+  # Flow logs are partitioned by VPC ID in the S3 key path.
   # ========================================
   VpcFlowQueue:
     Type: AWS::SQS::Queue
     Condition: DeployVpcFlowLogs
     Properties:
       QueueName: !Ref VpcFlowQueueName
-      MessageRetentionPeriod: 604800
+      MessageRetentionPeriod: !Ref SqsMessageRetentionSeconds
+      VisibilityTimeout: !Ref SqsVisibilityTimeoutSeconds
 
   VpcFlowQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -583,7 +692,7 @@ Resources:
             BucketKeyEnabled: true
       LifecycleConfiguration:
         Rules:
-          - Id: ExpireAfter60Days
+          - Id: ExpireLogs
             Status: Enabled
             ExpirationInDays: !Ref LogRetentionDays
             NoncurrentVersionExpiration:
@@ -632,23 +741,7 @@ Resources:
               Bool:
                 aws:SecureTransport: false
 
-  VpcFlowLog:
-    Type: AWS::EC2::FlowLog
-    Condition: DeployVpcFlowLogs
-    DependsOn: VpcFlowBucketPolicy
-    Properties:
-      ResourceType: VPC
-      ResourceId: !Ref VpcId
-      TrafficType: !Ref FlowLogTrafficType
-      LogDestinationType: s3
-      LogDestination: !GetAtt VpcFlowBucket.Arn
-      LogFormat: '${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status}'
-      MaxAggregationInterval: 60
-      Tags:
-        - Key: Name
-          Value: Todyl-VPC-Flow-Log
-
-  VpcFlowLogsManagedPolicy:
+  VpcFlowManagedPolicy:
     Type: AWS::IAM::ManagedPolicy
     Condition: DeployVpcFlowLogs
     Properties:
@@ -676,12 +769,177 @@ Resources:
       Users:
         - !Ref TodylUser
 
+  # ========================================
+  # VPC FLOW LOGS — per-VPC FlowLog resources
+  # Each VPC gets its own FlowLog pointing to the shared bucket.
+  # Logs are partitioned by VPC ID automatically in the S3 key path.
+  # ========================================
+  VpcFlowLog1:
+    Type: AWS::EC2::FlowLog
+    Condition: DeployVpc1
+    DependsOn: VpcFlowBucketPolicy
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref VpcId1
+      TrafficType: !Ref FlowLogTrafficType
+      LogDestinationType: s3
+      LogDestination: !GetAtt VpcFlowBucket.Arn
+      LogFormat: '${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status}'
+      MaxAggregationInterval: 60
+      Tags:
+        - Key: Name
+          Value: !Sub 'Todyl-VPC-Flow-Log-${VpcId1}'
+
+  VpcFlowLog2:
+    Type: AWS::EC2::FlowLog
+    Condition: DeployVpc2
+    DependsOn: VpcFlowBucketPolicy
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref VpcId2
+      TrafficType: !Ref FlowLogTrafficType
+      LogDestinationType: s3
+      LogDestination: !GetAtt VpcFlowBucket.Arn
+      LogFormat: '${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status}'
+      MaxAggregationInterval: 60
+      Tags:
+        - Key: Name
+          Value: !Sub 'Todyl-VPC-Flow-Log-${VpcId2}'
+
+  VpcFlowLog3:
+    Type: AWS::EC2::FlowLog
+    Condition: DeployVpc3
+    DependsOn: VpcFlowBucketPolicy
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref VpcId3
+      TrafficType: !Ref FlowLogTrafficType
+      LogDestinationType: s3
+      LogDestination: !GetAtt VpcFlowBucket.Arn
+      LogFormat: '${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status}'
+      MaxAggregationInterval: 60
+      Tags:
+        - Key: Name
+          Value: !Sub 'Todyl-VPC-Flow-Log-${VpcId3}'
+
+  VpcFlowLog4:
+    Type: AWS::EC2::FlowLog
+    Condition: DeployVpc4
+    DependsOn: VpcFlowBucketPolicy
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref VpcId4
+      TrafficType: !Ref FlowLogTrafficType
+      LogDestinationType: s3
+      LogDestination: !GetAtt VpcFlowBucket.Arn
+      LogFormat: '${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status}'
+      MaxAggregationInterval: 60
+      Tags:
+        - Key: Name
+          Value: !Sub 'Todyl-VPC-Flow-Log-${VpcId4}'
+
+  VpcFlowLog5:
+    Type: AWS::EC2::FlowLog
+    Condition: DeployVpc5
+    DependsOn: VpcFlowBucketPolicy
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref VpcId5
+      TrafficType: !Ref FlowLogTrafficType
+      LogDestinationType: s3
+      LogDestination: !GetAtt VpcFlowBucket.Arn
+      LogFormat: '${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status}'
+      MaxAggregationInterval: 60
+      Tags:
+        - Key: Name
+          Value: !Sub 'Todyl-VPC-Flow-Log-${VpcId5}'
+
+  VpcFlowLog6:
+    Type: AWS::EC2::FlowLog
+    Condition: DeployVpc6
+    DependsOn: VpcFlowBucketPolicy
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref VpcId6
+      TrafficType: !Ref FlowLogTrafficType
+      LogDestinationType: s3
+      LogDestination: !GetAtt VpcFlowBucket.Arn
+      LogFormat: '${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status}'
+      MaxAggregationInterval: 60
+      Tags:
+        - Key: Name
+          Value: !Sub 'Todyl-VPC-Flow-Log-${VpcId6}'
+
+  VpcFlowLog7:
+    Type: AWS::EC2::FlowLog
+    Condition: DeployVpc7
+    DependsOn: VpcFlowBucketPolicy
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref VpcId7
+      TrafficType: !Ref FlowLogTrafficType
+      LogDestinationType: s3
+      LogDestination: !GetAtt VpcFlowBucket.Arn
+      LogFormat: '${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status}'
+      MaxAggregationInterval: 60
+      Tags:
+        - Key: Name
+          Value: !Sub 'Todyl-VPC-Flow-Log-${VpcId7}'
+
+  VpcFlowLog8:
+    Type: AWS::EC2::FlowLog
+    Condition: DeployVpc8
+    DependsOn: VpcFlowBucketPolicy
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref VpcId8
+      TrafficType: !Ref FlowLogTrafficType
+      LogDestinationType: s3
+      LogDestination: !GetAtt VpcFlowBucket.Arn
+      LogFormat: '${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status}'
+      MaxAggregationInterval: 60
+      Tags:
+        - Key: Name
+          Value: !Sub 'Todyl-VPC-Flow-Log-${VpcId8}'
+
+  VpcFlowLog9:
+    Type: AWS::EC2::FlowLog
+    Condition: DeployVpc9
+    DependsOn: VpcFlowBucketPolicy
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref VpcId9
+      TrafficType: !Ref FlowLogTrafficType
+      LogDestinationType: s3
+      LogDestination: !GetAtt VpcFlowBucket.Arn
+      LogFormat: '${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status}'
+      MaxAggregationInterval: 60
+      Tags:
+        - Key: Name
+          Value: !Sub 'Todyl-VPC-Flow-Log-${VpcId9}'
+
+  VpcFlowLog10:
+    Type: AWS::EC2::FlowLog
+    Condition: DeployVpc10
+    DependsOn: VpcFlowBucketPolicy
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref VpcId10
+      TrafficType: !Ref FlowLogTrafficType
+      LogDestinationType: s3
+      LogDestination: !GetAtt VpcFlowBucket.Arn
+      LogFormat: '${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status}'
+      MaxAggregationInterval: 60
+      Tags:
+        - Key: Name
+          Value: !Sub 'Todyl-VPC-Flow-Log-${VpcId10}'
+
 Outputs:
   # ========================================
-  # CREDENTIALS (single set for all services)
+  # CREDENTIALS
   # ========================================
   CredentialsSecretArn:
-    Description: Secrets Manager ARN containing Todyl access credentials (AccessKeyId + SecretAccessKey)
+    Description: Secrets Manager ARN containing Todyl access credentials
     Value: !Ref TodylAccessKeySecret
 
   TodylUserArn:
@@ -689,7 +947,7 @@ Outputs:
     Value: !GetAtt TodylUser.Arn
 
   # ========================================
-  # CLOUDTRAIL QUEUE (always present)
+  # CLOUDTRAIL
   # ========================================
   CloudTrailQueueUrl:
     Description: CloudTrail SQS Queue URL for Todyl portal
@@ -708,7 +966,7 @@ Outputs:
     Value: !GetAtt CloudTrailKmsKey.Arn
 
   # ========================================
-  # GUARDDUTY QUEUE (conditional)
+  # GUARDDUTY
   # ========================================
   GuardDutyQueueUrl:
     Condition: DeployGuardDuty
@@ -722,16 +980,16 @@ Outputs:
 
   GuardDutyBucketArn:
     Condition: DeployGuardDuty
-    Description: GuardDuty S3 Bucket ARN (needed for manual GuardDuty export configuration)
+    Description: GuardDuty S3 Bucket ARN
     Value: !GetAtt GuardDutyBucket.Arn
 
   GuardDutyKmsKeyArn:
     Condition: DeployGuardDuty
-    Description: GuardDuty KMS Key ARN (needed for GuardDuty export configuration)
+    Description: GuardDuty KMS Key ARN
     Value: !GetAtt GuardDutyKmsKey.Arn
 
   # ========================================
-  # VPC FLOW LOGS QUEUE (conditional)
+  # VPC FLOW LOGS
   # ========================================
   VpcFlowQueueUrl:
     Condition: DeployVpcFlowLogs
@@ -753,7 +1011,52 @@ Outputs:
     Description: VPC Flow Logs KMS Key ARN
     Value: !GetAtt VpcFlowKmsKey.Arn
 
-  VpcFlowLogId:
-    Condition: DeployVpcFlowLogs
-    Description: VPC Flow Log ID
-    Value: !Ref VpcFlowLog
+  VpcFlowLog1Id:
+    Condition: DeployVpc1
+    Description: VPC Flow Log ID for VpcId1
+    Value: !Ref VpcFlowLog1
+
+  VpcFlowLog2Id:
+    Condition: DeployVpc2
+    Description: VPC Flow Log ID for VpcId2
+    Value: !Ref VpcFlowLog2
+
+  VpcFlowLog3Id:
+    Condition: DeployVpc3
+    Description: VPC Flow Log ID for VpcId3
+    Value: !Ref VpcFlowLog3
+
+  VpcFlowLog4Id:
+    Condition: DeployVpc4
+    Description: VPC Flow Log ID for VpcId4
+    Value: !Ref VpcFlowLog4
+
+  VpcFlowLog5Id:
+    Condition: DeployVpc5
+    Description: VPC Flow Log ID for VpcId5
+    Value: !Ref VpcFlowLog5
+
+  VpcFlowLog6Id:
+    Condition: DeployVpc6
+    Description: VPC Flow Log ID for VpcId6
+    Value: !Ref VpcFlowLog6
+
+  VpcFlowLog7Id:
+    Condition: DeployVpc7
+    Description: VPC Flow Log ID for VpcId7
+    Value: !Ref VpcFlowLog7
+
+  VpcFlowLog8Id:
+    Condition: DeployVpc8
+    Description: VPC Flow Log ID for VpcId8
+    Value: !Ref VpcFlowLog8
+
+  VpcFlowLog9Id:
+    Condition: DeployVpc9
+    Description: VPC Flow Log ID for VpcId9
+    Value: !Ref VpcFlowLog9
+
+  VpcFlowLog10Id:
+    Condition: DeployVpc10
+    Description: VPC Flow Log ID for VpcId10
+    Value: !Ref VpcFlowLog10
