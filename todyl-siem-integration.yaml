@@ -805,12 +805,7 @@ Outputs:
     Description: VPC Flow Logs KMS Key ARN
     Value: !GetAtt VpcFlowKmsKey.Arn
 
-  'Fn::ForEach::VpcFlowLogOutputs':
-    - VpcIdentifier
-    - !Ref VpcIds
-    - 'VpcFlowLog&{VpcIdentifier}Id':
-        Description: !Sub
-          - 'VPC Flow Log ID for ${VpcId}'
-          - VpcId: !Ref VpcIdentifier
-        Value: !Ref
-          'Fn::Sub': 'VpcFlowLog&{VpcIdentifier}'
+  # Per-VPC Flow Log IDs are not exported as outputs.
+  # The shared infrastructure outputs above (Queue, Bucket, KMS Key) are
+  # sufficient for Todyl integration. Individual Flow Log IDs can be found
+  # in the stack resources if needed.
