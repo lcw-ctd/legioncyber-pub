@@ -713,7 +713,6 @@ Resources:
     - !Ref VpcIds
     - 'VpcFlowLog&{VpcIdentifier}':
         Type: AWS::EC2::FlowLog
-        Condition: DeployVpcFlowLogs
         DependsOn: VpcFlowBucketPolicy
         Properties:
           ResourceType: VPC
@@ -810,7 +809,6 @@ Outputs:
     - VpcIdentifier
     - !Ref VpcIds
     - 'VpcFlowLog&{VpcIdentifier}Id':
-        Condition: DeployVpcFlowLogs
         Description: !Sub
           - 'VPC Flow Log ID for ${VpcId}'
           - VpcId: !Ref VpcIdentifier
