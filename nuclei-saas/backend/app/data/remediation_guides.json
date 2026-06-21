@@ -1,0 +1,431 @@
+{
+  "sql_injection": {
+    "cwe_id": 89,
+    "title": "SQL Injection",
+    "owasp_category": "A03",
+    "nuclei_tags": ["sqli", "sql-injection"],
+    "steps": [
+      "Replace all dynamic SQL string concatenation with parameterized queries or prepared statements",
+      "Apply strict input validation using allowlists — reject unexpected characters (quotes, semicolons, dashes)",
+      "Adopt an ORM (SQLAlchemy, Hibernate, ActiveRecord) that handles escaping by default",
+      "Apply the principle of least privilege: database accounts used by the application should have only SELECT/INSERT/UPDATE on required tables, never DROP or EXECUTE",
+      "Enable a Web Application Firewall rule set targeting SQL injection payloads as a defense-in-depth measure",
+      "Review stored procedures for dynamic SQL construction and convert them to parameterized variants",
+      "Enable database activity monitoring and alerting for anomalous query patterns",
+      "Conduct a code review of all database interaction layers using SAST tooling (Semgrep, CodeQL)"
+    ],
+    "code_examples": {
+      "python_sqlalchemy": "# WRONG\ndb.execute(f'SELECT * FROM users WHERE id = {user_id}')\n# CORRECT\ndb.execute(text('SELECT * FROM users WHERE id = :id'), {'id': user_id})",
+      "python_raw": "# WRONG\ncursor.execute('SELECT * FROM users WHERE name = \\'' + name + '\\'')\n# CORRECT\ncursor.execute('SELECT * FROM users WHERE name = %s', (name,))",
+      "java": "// WRONG\nString q = \"SELECT * FROM users WHERE id = \" + userId;\nstmt.execute(q);\n// CORRECT\nPreparedStatement stmt = conn.prepareStatement(\"SELECT * FROM users WHERE id = ?\");\nstmt.setInt(1, userId);\nResultSet rs = stmt.executeQuery();",
+      "php": "// WRONG\n$result = mysqli_query($conn, 'SELECT * FROM users WHERE id = ' . $_GET['id']);\n// CORRECT\n$stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');\n$stmt->execute([$_GET['id']]);"
+    },
+    "references": [
+      "https://owasp.org/www-community/attacks/SQL_Injection",
+      "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html",
+      "https://cwe.mitre.org/data/definitions/89.html"
+    ],
+    "estimated_effort": "2–4 hours per endpoint",
+    "priority": "critical"
+  },
+  "cross_site_scripting": {
+    "cwe_id": 79,
+    "title": "Cross-Site Scripting (XSS)",
+    "owasp_category": "A03",
+    "nuclei_tags": ["xss", "cross-site-scripting"],
+    "steps": [
+      "Apply context-sensitive output encoding for all user-supplied data rendered in HTML (HTML encode), JavaScript (JS encode), CSS (CSS encode), and URL (URL encode) contexts",
+      "Use a modern frontend framework (React, Vue, Angular) that auto-escapes output by default — avoid dangerouslySetInnerHTML / v-html / [innerHTML] unless absolutely necessary",
+      "Implement a strict Content Security Policy (CSP) header: Content-Security-Policy: default-src 'self'; script-src 'self'",
+      "Set the HttpOnly flag on session cookies to prevent JavaScript access",
+      "Apply input validation to reject unexpected HTML tags and JavaScript event handlers in user input",
+      "Use DOMPurify or similar library to sanitize any rich text that must allow HTML",
+      "Enable X-XSS-Protection: 1; mode=block header for legacy browsers",
+      "Conduct SAST scanning to identify all reflection points where user input is rendered"
+    ],
+    "code_examples": {
+      "python_jinja2": "# WRONG: mark_safe or | safe filter bypasses auto-escaping\nreturn render_template('page.html', name=Markup(user_input))\n# CORRECT: Jinja2 auto-escapes by default\nreturn render_template('page.html', name=user_input)",
+      "javascript_dom": "// WRONG\ndocument.getElementById('msg').innerHTML = userInput;\n// CORRECT\ndocument.getElementById('msg').textContent = userInput;",
+      "react": "// WRONG\n<div dangerouslySetInnerHTML={{ __html: userInput }} />\n// CORRECT\n<div>{userInput}</div>",
+      "csp_header": "# Nginx CSP header\nadd_header Content-Security-Policy \"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; object-src 'none'; base-uri 'self';\" always;"
+    },
+    "references": [
+      "https://owasp.org/www-community/attacks/xss/",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html",
+      "https://cwe.mitre.org/data/definitions/79.html"
+    ],
+    "estimated_effort": "1–3 hours per endpoint",
+    "priority": "high"
+  },
+  "ssrf": {
+    "cwe_id": 918,
+    "title": "Server-Side Request Forgery (SSRF)",
+    "owasp_category": "A10",
+    "nuclei_tags": ["ssrf", "server-side-request-forgery"],
+    "steps": [
+      "Validate and sanitize all URLs provided by users before making server-side HTTP requests",
+      "Implement an allowlist of permitted external hostnames/IP ranges — deny all others by default",
+      "Block requests to private IP ranges (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16) and cloud metadata endpoints (169.254.169.254)",
+      "Resolve hostnames server-side and validate the resulting IP address against the allowlist (DNS rebinding protection)",
+      "Use a dedicated HTTP client library configured to disallow redirects to private addresses",
+      "Disable unnecessary URL-fetching features (XML external entity processing, PDF renderers that fetch external resources)",
+      "Run outbound HTTP requests through an egress proxy that enforces the allowlist at the network layer",
+      "Monitor and alert on outbound HTTP requests to internal network ranges"
+    ],
+    "code_examples": {
+      "python": "import ipaddress, socket\nDENIED_NETWORKS = [ipaddress.ip_network(n) for n in [\n    '127.0.0.0/8','10.0.0.0/8','172.16.0.0/12','192.168.0.0/16','169.254.0.0/16'\n]]\ndef is_safe_url(url: str) -> bool:\n    host = urllib.parse.urlparse(url).hostname\n    ip = ipaddress.ip_address(socket.gethostbyname(host))\n    return not any(ip in net for net in DENIED_NETWORKS)",
+      "node": "const { URL } = require('url');\nconst dns = require('dns').promises;\nconst PRIVATE_RANGES = [/^127\\./, /^10\\./, /^192\\.168\\./, /^172\\.(1[6-9]|2\\d|3[01])\\./, /^169\\.254\\./];\nasync function isSafeUrl(rawUrl) {\n  const { hostname } = new URL(rawUrl);\n  const { address } = await dns.lookup(hostname);\n  return !PRIVATE_RANGES.some(re => re.test(address));\n}"
+    },
+    "references": [
+      "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html",
+      "https://cwe.mitre.org/data/definitions/918.html"
+    ],
+    "estimated_effort": "4–8 hours",
+    "priority": "high"
+  },
+  "path_traversal": {
+    "cwe_id": 22,
+    "title": "Path Traversal / Directory Traversal",
+    "owasp_category": "A01",
+    "nuclei_tags": ["lfi", "path-traversal", "directory-traversal"],
+    "steps": [
+      "Never construct file paths directly from user input — use a fixed base directory and map user input to filenames within it",
+      "Normalize and canonicalize all file paths using os.path.realpath() or Path.resolve() before use",
+      "Verify the resolved path starts with the expected base directory (jail check)",
+      "Maintain an allowlist of permitted file extensions and filenames",
+      "Remove or encode path separator characters (/, \\, ..) from all user input",
+      "Run the application process with minimal filesystem permissions using OS-level sandboxing",
+      "Disable directory listing on web servers (Options -Indexes in Apache, autoindex off in Nginx)"
+    ],
+    "code_examples": {
+      "python": "import os\nBASE_DIR = '/var/app/uploads'\n# WRONG\npath = os.path.join(BASE_DIR, user_filename)\n# CORRECT\npath = os.path.realpath(os.path.join(BASE_DIR, user_filename))\nif not path.startswith(BASE_DIR + os.sep):\n    raise ValueError('Invalid path')",
+      "java": "Path basePath = Paths.get(\"/var/app/uploads\").normalize();\nPath userPath = basePath.resolve(userInput).normalize();\nif (!userPath.startsWith(basePath)) {\n    throw new SecurityException(\"Path traversal detected\");\n}"
+    },
+    "references": [
+      "https://owasp.org/www-community/attacks/Path_Traversal",
+      "https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html",
+      "https://cwe.mitre.org/data/definitions/22.html"
+    ],
+    "estimated_effort": "2–4 hours",
+    "priority": "high"
+  },
+  "auth_bypass": {
+    "cwe_id": 287,
+    "title": "Authentication Bypass",
+    "owasp_category": "A07",
+    "nuclei_tags": ["auth", "bypass", "auth-bypass"],
+    "steps": [
+      "Enforce authentication checks on every protected endpoint at the framework/middleware level rather than individual handlers",
+      "Implement a centralized authentication middleware that runs before all routes",
+      "Use a framework-level authorization decorator or guard (not ad-hoc per-function checks)",
+      "Test each endpoint independently for missing authentication — use an unauthenticated HTTP client",
+      "Ensure API versioning changes don't bypass authentication middleware (e.g., /api/v2/ endpoint missing auth guards)",
+      "Implement proper HTTP method enforcement (GET vs POST) and reject unexpected methods",
+      "Validate JWT signature and expiry on every request, reject tokens signed with 'none' algorithm",
+      "Implement rate limiting on authentication endpoints to prevent brute force"
+    ],
+    "code_examples": {
+      "fastapi": "from fastapi import Depends, HTTPException\nfrom app.core.auth import get_current_user\n\n# WRONG — auth only applied to some endpoints\n@router.get('/admin/users')\nasync def get_users():\n    return users  # Missing auth!\n\n# CORRECT — auth applied via dependency\n@router.get('/admin/users')\nasync def get_users(current_user = Depends(get_current_user)):\n    return users"
+    },
+    "references": [
+      "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html",
+      "https://cwe.mitre.org/data/definitions/287.html"
+    ],
+    "estimated_effort": "4–16 hours (depends on scope)",
+    "priority": "critical"
+  },
+  "exposed_admin_panel": {
+    "cwe_id": 284,
+    "title": "Exposed Admin Panel",
+    "owasp_category": "A05",
+    "nuclei_tags": ["panel", "admin", "default-login", "exposure"],
+    "steps": [
+      "Move admin interfaces to a non-standard URL path not guessable by automated scanners",
+      "Restrict access to admin panels by IP allowlist at the network/WAF layer",
+      "Require multi-factor authentication for all administrative access",
+      "Implement a separate authentication domain or VPN requirement for admin access",
+      "Remove or disable default admin credentials immediately after deployment",
+      "Apply HTTP Basic Authentication as an additional layer before the admin application itself",
+      "Monitor and alert on failed authentication attempts to admin endpoints",
+      "Regularly audit admin user accounts and remove unused accounts"
+    ],
+    "code_examples": {
+      "nginx": "# Restrict Django admin by IP\nlocation /admin/ {\n    allow 203.0.113.0/24;  # Office IP range\n    allow 10.0.0.0/8;      # VPN range\n    deny all;\n    proxy_pass http://backend;\n}"
+    },
+    "references": [
+      "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Access_Control_Cheat_Sheet.html",
+      "https://cwe.mitre.org/data/definitions/284.html"
+    ],
+    "estimated_effort": "2–6 hours",
+    "priority": "high"
+  },
+  "missing_security_headers": {
+    "cwe_id": 16,
+    "title": "Missing or Misconfigured Security Headers",
+    "owasp_category": "A05",
+    "nuclei_tags": ["misconfig", "headers", "security-headers"],
+    "steps": [
+      "Add Content-Security-Policy header with a strict policy that disallows inline scripts and unsafe-eval",
+      "Set Strict-Transport-Security: max-age=31536000; includeSubDomains; preload to enforce HTTPS",
+      "Add X-Frame-Options: DENY or SAMEORIGIN to prevent clickjacking",
+      "Set X-Content-Type-Options: nosniff to prevent MIME type sniffing",
+      "Add Referrer-Policy: strict-origin-when-cross-origin to control referrer leakage",
+      "Set Permissions-Policy to disable unused browser features (camera, microphone, geolocation)",
+      "Configure CORS headers to explicitly allowlist permitted origins — never use Access-Control-Allow-Origin: *",
+      "Use SecurityHeaders.com to validate headers after implementation"
+    ],
+    "code_examples": {
+      "nginx": "# Add to nginx server block\nadd_header Content-Security-Policy \"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; object-src 'none';\" always;\nadd_header Strict-Transport-Security \"max-age=31536000; includeSubDomains; preload\" always;\nadd_header X-Frame-Options \"DENY\" always;\nadd_header X-Content-Type-Options \"nosniff\" always;\nadd_header Referrer-Policy \"strict-origin-when-cross-origin\" always;\nadd_header Permissions-Policy \"geolocation=(), microphone=(), camera=()\" always;",
+      "fastapi": "from fastapi.middleware.trustedhost import TrustedHostMiddleware\nfrom starlette.middleware.base import BaseHTTPMiddleware\n\nclass SecurityHeadersMiddleware(BaseHTTPMiddleware):\n    async def dispatch(self, request, call_next):\n        response = await call_next(request)\n        response.headers['X-Content-Type-Options'] = 'nosniff'\n        response.headers['X-Frame-Options'] = 'DENY'\n        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'\n        return response"
+    },
+    "references": [
+      "https://owasp.org/www-project-secure-headers/",
+      "https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP",
+      "https://securityheaders.com"
+    ],
+    "estimated_effort": "1–3 hours",
+    "priority": "medium"
+  },
+  "weak_tls": {
+    "cwe_id": 326,
+    "title": "Weak TLS Configuration",
+    "owasp_category": "A02",
+    "nuclei_tags": ["ssl", "tls", "weak-tls", "weak-cipher", "certificate"],
+    "steps": [
+      "Disable TLS 1.0 and TLS 1.1 — support only TLS 1.2 and TLS 1.3",
+      "Configure a strong cipher suite order: prefer ECDHE key exchange and AES-GCM/CHACHA20 ciphers",
+      "Disable weak ciphers: RC4, DES, 3DES, MD5-signed certificates, NULL ciphers, export ciphers",
+      "Enable OCSP stapling to improve certificate validation performance and privacy",
+      "Implement HSTS with a minimum max-age of 1 year and includeSubDomains",
+      "Submit your domain to the HSTS preload list at hstspreload.org",
+      "Use a minimum RSA key size of 2048 bits or ECDSA P-256",
+      "Renew certificates at least 30 days before expiry — use Let's Encrypt with auto-renewal"
+    ],
+    "code_examples": {
+      "nginx": "ssl_protocols TLSv1.2 TLSv1.3;\nssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;\nssl_prefer_server_ciphers off;\nssl_session_cache shared:SSL:10m;\nssl_session_timeout 1d;\nssl_stapling on;\nssl_stapling_verify on;",
+      "openssl_test": "# Test TLS configuration\nopenssl s_client -connect yourdomain.com:443 -tls1   # Should fail\nopenssl s_client -connect yourdomain.com:443 -tls1_1 # Should fail\nopenssl s_client -connect yourdomain.com:443 -tls1_2 # Should succeed\n# Also use: https://www.ssllabs.com/ssltest/"
+    },
+    "references": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/TLS_Cipher_String_Cheat_Sheet.html",
+      "https://wiki.mozilla.org/Security/Server_Side_TLS",
+      "https://www.ssllabs.com/ssltest/",
+      "https://cwe.mitre.org/data/definitions/326.html"
+    ],
+    "estimated_effort": "1–2 hours",
+    "priority": "medium"
+  },
+  "jwt_vulnerabilities": {
+    "cwe_id": 347,
+    "title": "JWT Vulnerabilities (Algorithm Confusion, Weak Secret)",
+    "owasp_category": "A02",
+    "nuclei_tags": ["jwt", "token", "auth"],
+    "steps": [
+      "Explicitly specify and validate the expected algorithm in JWT verification — never trust the 'alg' header from the token",
+      "Reject tokens with alg: 'none' — configure your library to require a specific signing algorithm",
+      "Use strong, random secrets for HMAC: minimum 256 bits (32 random bytes) — generate with: python -c \"import secrets; print(secrets.token_hex(32))\"",
+      "For production, prefer RS256 or ES256 (asymmetric keys) over HS256 to separate signing from verification",
+      "Set appropriate expiry (exp claim): access tokens 15–30 minutes, refresh tokens 7–30 days",
+      "Validate all standard claims: exp, nbf, iss, aud",
+      "Implement token revocation for sensitive operations using a token blacklist or jti (JWT ID) tracking",
+      "Rotate signing keys periodically and support key versioning via kid (key ID) header"
+    ],
+    "code_examples": {
+      "python_pyjwt": "import jwt\n\n# WRONG: trusts the algorithm from the token header\npayload = jwt.decode(token, secret, algorithms=None)  # Never do this!\n\n# CORRECT: explicitly specify allowed algorithms\npayload = jwt.decode(\n    token,\n    secret,\n    algorithms=['HS256'],  # Only allow HS256\n    options={'require': ['exp', 'iss', 'aud']},\n    audience='legioncyber-shield',\n    issuer='api.shield.legioncyber.com'\n)"
+    },
+    "references": [
+      "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/",
+      "https://portswigger.net/web-security/jwt",
+      "https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html",
+      "https://cwe.mitre.org/data/definitions/347.html"
+    ],
+    "estimated_effort": "2–4 hours",
+    "priority": "critical"
+  },
+  "cors_misconfiguration": {
+    "cwe_id": 942,
+    "title": "CORS Misconfiguration",
+    "owasp_category": "A05",
+    "nuclei_tags": ["cors", "misconfig"],
+    "steps": [
+      "Define an explicit allowlist of trusted origins — never use Access-Control-Allow-Origin: *",
+      "Do not reflect the Origin header value back without validation",
+      "If using wildcard origin, ensure Access-Control-Allow-Credentials is NOT set to true (this combination is forbidden by browsers but some frameworks allow it incorrectly)",
+      "Restrict allowed methods to only those required (GET, POST) — avoid exposing PUT/DELETE via CORS to third-party origins",
+      "Set a narrow Access-Control-Allow-Headers list",
+      "Set the Vary: Origin response header when dynamic origin allowlisting is used",
+      "Test CORS configuration with both an allowlisted and non-allowlisted origin using curl"
+    ],
+    "code_examples": {
+      "fastapi": "from fastapi.middleware.cors import CORSMiddleware\n\napp.add_middleware(\n    CORSMiddleware,\n    allow_origins=['https://shield.legioncyber.com'],  # Explicit allowlist, NOT '*'\n    allow_credentials=True,\n    allow_methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],\n    allow_headers=['Authorization', 'Content-Type'],\n)",
+      "nginx": "# Validate Origin before adding CORS headers\nmap $http_origin $cors_origin {\n    default \"\";\n    \"https://shield.legioncyber.com\" \"$http_origin\";\n    \"https://api.shield.legioncyber.com\" \"$http_origin\";\n}\nadd_header Access-Control-Allow-Origin $cors_origin always;"
+    },
+    "references": [
+      "https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny",
+      "https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html",
+      "https://portswigger.net/web-security/cors",
+      "https://cwe.mitre.org/data/definitions/942.html"
+    ],
+    "estimated_effort": "1–2 hours",
+    "priority": "medium"
+  },
+  "exposed_secrets": {
+    "cwe_id": 200,
+    "title": "Exposed Secrets / Credentials in Responses or Source",
+    "owasp_category": "A02",
+    "nuclei_tags": ["secret", "exposure", "disclosure", "api-key", "token"],
+    "steps": [
+      "Immediately rotate any exposed credentials, API keys, tokens, or passwords",
+      "Remove secrets from all code repositories — use git filter-repo or BFG Repo Cleaner to purge git history",
+      "Move all secrets to environment variables or a dedicated secrets manager (AWS Secrets Manager, HashiCorp Vault, Azure Key Vault)",
+      "Add .env, *.pem, *.key, credentials.json to .gitignore",
+      "Implement pre-commit hooks with Gitleaks or truffleHog to prevent future secret commits",
+      "Enable GitHub/GitLab secret scanning alerts",
+      "Audit API responses for accidentally included secret fields and strip them in serializers",
+      "Implement secrets rotation policy (30–90 days for API keys)"
+    ],
+    "code_examples": {
+      "python_env": "# WRONG: hardcoded secret\nAWS_SECRET = 'AKIAIOSFODNN7EXAMPLE'\n\n# CORRECT: from environment\nimport os\nAWS_SECRET = os.environ['AWS_SECRET_ACCESS_KEY']\n# Or with python-decouple / pydantic BaseSettings:\nfrom app.config import settings\naws_secret = settings.aws_secret_access_key",
+      "gitleaks": "# Install and run Gitleaks\nbrew install gitleaks\ngitleaks detect --source . --verbose\n\n# Add as pre-commit hook\n# .pre-commit-config.yaml:\n- repo: https://github.com/gitleaks/gitleaks\n  rev: v8.18.0\n  hooks:\n    - id: gitleaks"
+    },
+    "references": [
+      "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html",
+      "https://github.com/gitleaks/gitleaks",
+      "https://cwe.mitre.org/data/definitions/200.html"
+    ],
+    "estimated_effort": "4–8 hours (remediation + rotation)",
+    "priority": "critical"
+  },
+  "insecure_deserialization": {
+    "cwe_id": 502,
+    "title": "Insecure Deserialization",
+    "owasp_category": "A08",
+    "nuclei_tags": ["deserialization", "java-deserialization", "pickle"],
+    "steps": [
+      "Never deserialize data from untrusted sources using native language deserialization mechanisms (Python pickle, Java ObjectInputStream, PHP unserialize)",
+      "Use data-only serialization formats: JSON, Protocol Buffers, MessagePack, or Avro instead of language-native formats",
+      "If native deserialization is unavoidable, implement integrity checks (HMAC signature) before deserialization",
+      "Apply allowlist deserialization — only allow expected classes/types to be deserialized",
+      "Run deserialization in a sandboxed environment with minimal permissions",
+      "Monitor for deserialization gadget chain indicators in application logs",
+      "Update libraries with known deserialization vulnerabilities (Jackson, XStream, SnakeYAML)"
+    ],
+    "code_examples": {
+      "python_wrong": "# WRONG: pickle can execute arbitrary code\nimport pickle\nobj = pickle.loads(request.body)  # Never do this with untrusted data!\n\n# CORRECT: use JSON or another safe format\nimport json\nobj = json.loads(request.body)  # Safe — no code execution",
+      "java": "// Use allowlist deserializer\nObjectInputFilter filter = ObjectInputFilter.Config.createFilter(\n    \"maxbytes=1024;maxdepth=5;com.myapp.dto.*;!*\"\n);\nObjectInputStream ois = new ObjectInputStream(inputStream);\nois.setObjectInputFilter(filter);"
+    },
+    "references": [
+      "https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html",
+      "https://github.com/GrrrDog/Java-Deserialization-Cheat-Sheet",
+      "https://cwe.mitre.org/data/definitions/502.html"
+    ],
+    "estimated_effort": "4–16 hours",
+    "priority": "critical"
+  },
+  "xxe": {
+    "cwe_id": 611,
+    "title": "XML External Entity Injection (XXE)",
+    "owasp_category": "A03",
+    "nuclei_tags": ["xxe", "xml", "injection"],
+    "steps": [
+      "Disable external entity processing in all XML parsers — this is typically OFF by default only in newer library versions",
+      "Disable DOCTYPE declarations if not required",
+      "Use a modern, secure XML library with safe defaults (defusedxml in Python)",
+      "Where possible, use JSON instead of XML for data exchange",
+      "Validate XML input against a strict schema (XSD) before processing",
+      "Update XML libraries to latest versions which often disable XXE by default"
+    ],
+    "code_examples": {
+      "python": "# WRONG: standard ElementTree may be vulnerable in older Python versions\nimport xml.etree.ElementTree as ET\ntree = ET.parse(user_xml_file)  # May be vulnerable\n\n# CORRECT: use defusedxml\nimport defusedxml.ElementTree as ET\ntree = ET.parse(user_xml_file)  # Safe",
+      "java": "// Disable XXE in DocumentBuilderFactory\nDocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();\nfactory.setFeature(\"http://apache.org/xml/features/disallow-doctype-decl\", true);\nfactory.setFeature(\"http://xml.org/sax/features/external-general-entities\", false);\nfactory.setFeature(\"http://xml.org/sax/features/external-parameter-entities\", false);\nfactory.setExpandEntityReferences(false);"
+    },
+    "references": [
+      "https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing",
+      "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html",
+      "https://github.com/tiran/defusedxml",
+      "https://cwe.mitre.org/data/definitions/611.html"
+    ],
+    "estimated_effort": "2–4 hours",
+    "priority": "high"
+  },
+  "command_injection": {
+    "cwe_id": 78,
+    "title": "Command Injection / OS Command Injection",
+    "owasp_category": "A03",
+    "nuclei_tags": ["rce", "injection", "command-injection"],
+    "steps": [
+      "Avoid using shell=True in subprocess calls — always use argument lists to prevent shell interpretation",
+      "Never construct OS commands by concatenating user input",
+      "Use language-native library functions instead of shell commands where possible (e.g., os.rename() instead of shell 'mv')",
+      "Apply strict input validation with allowlists before passing any input near shell commands",
+      "Use shlex.quote() (Python) or ProcessBuilder (Java) for unavoidable dynamic arguments",
+      "Run the application process with minimal OS privileges — apply principle of least privilege",
+      "Implement Linux seccomp filters to restrict system calls available to the process",
+      "Monitor for unusual child process spawning in application telemetry"
+    ],
+    "code_examples": {
+      "python": "import subprocess\n\n# WRONG: shell=True allows injection\nsubprocess.run(f'convert {user_filename} output.pdf', shell=True)\n\n# CORRECT: argument list, no shell\nsubprocess.run(['convert', user_filename, 'output.pdf'], check=True)\n\n# Also validate the filename first:\nimport re\nif not re.match(r'^[a-zA-Z0-9_.-]+$', user_filename):\n    raise ValueError('Invalid filename')"
+    },
+    "references": [
+      "https://owasp.org/www-community/attacks/Command_Injection",
+      "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html",
+      "https://cwe.mitre.org/data/definitions/78.html"
+    ],
+    "estimated_effort": "2–4 hours per occurrence",
+    "priority": "critical"
+  },
+  "directory_listing": {
+    "cwe_id": 548,
+    "title": "Directory Listing Enabled",
+    "owasp_category": "A05",
+    "nuclei_tags": ["exposure", "directory-listing", "misconfig"],
+    "steps": [
+      "Disable directory listing in web server configuration",
+      "Ensure all directories accessible via the web contain an index file",
+      "Review which directories are exposed via web server configuration and remove unnecessary ones",
+      "Apply access controls to any directory that must be accessible but should not be browsable",
+      "Audit web root for sensitive files that may be exposed (backups, configuration files, .git directories)"
+    ],
+    "code_examples": {
+      "nginx": "# Disable directory listing in Nginx (default is off, but confirm explicitly)\nautoindex off;",
+      "apache": "# Disable in Apache\n<Directory /var/www/html>\n    Options -Indexes\n</Directory>"
+    },
+    "references": [
+      "https://owasp.org/www-community/attacks/Unprotected_Admin_Pages",
+      "https://cwe.mitre.org/data/definitions/548.html"
+    ],
+    "estimated_effort": "30 minutes",
+    "priority": "low"
+  },
+  "default_credentials": {
+    "cwe_id": 1392,
+    "title": "Default Credentials",
+    "owasp_category": "A07",
+    "nuclei_tags": ["default-login", "default-credentials", "weak-credentials"],
+    "steps": [
+      "Immediately change all default credentials on all services, databases, admin panels, and network devices",
+      "Implement a first-run wizard that forces credential change before system is usable",
+      "Audit all third-party components and SaaS integrations for default credentials",
+      "Implement account lockout after 5–10 failed login attempts",
+      "Enable MFA on all administrative interfaces",
+      "Use a password manager and enforce strong password policies (minimum 16 characters, complexity requirements)",
+      "Maintain an inventory of all services with admin interfaces and review credentials quarterly",
+      "Remove or disable demo/test accounts in production deployments"
+    ],
+    "code_examples": {
+      "check_script": "#!/bin/bash\n# Check for common default credentials\nservices=('redis:6379' 'postgres:5432' 'elasticsearch:9200' 'kibana:5601')\nfor svc in \"${services[@]}\"; do\n  host=\"${svc%:*}\"\n  port=\"${svc#*:}\"\n  echo \"Checking $host:$port for open access...\"\n  nc -z -w2 $host $port && echo \"WARNING: $svc is reachable!\" || echo \"OK: $svc not reachable\"\ndone"
+    },
+    "references": [
+      "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html",
+      "https://cwe.mitre.org/data/definitions/1392.html"
+    ],
+    "estimated_effort": "1–4 hours",
+    "priority": "critical"
+  }
+}

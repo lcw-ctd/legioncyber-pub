@@ -1,0 +1,100 @@
+[
+  {
+    "id": "quick_scan",
+    "name": "Quick Security Check",
+    "description": "Fast scan focusing on critical misconfigurations and high-severity issues. Ideal for rapid triage or initial assessment of a new domain.",
+    "template_tags": ["misconfig", "exposure", "default-login", "panel"],
+    "severity_filter": ["critical", "high"],
+    "exclude_tags": ["dos", "fuzz", "intrusive"],
+    "estimated_duration_minutes": 10,
+    "available_in_plans": ["free", "starter", "professional", "enterprise", "onetime"],
+    "icon": "zap",
+    "color": "#f57c00"
+  },
+  {
+    "id": "owasp_top10",
+    "name": "OWASP Top 10",
+    "description": "Comprehensive testing against all OWASP Top 10 2021 vulnerabilities including injection attacks, broken authentication, security misconfigurations, vulnerable components, and more.",
+    "template_tags": ["owasp", "injection", "xss", "sqli", "ssrf", "idor", "auth", "crypto", "misconfig", "ssti"],
+    "severity_filter": ["critical", "high", "medium", "low"],
+    "exclude_tags": ["dos", "fuzz"],
+    "estimated_duration_minutes": 30,
+    "available_in_plans": ["starter", "professional", "enterprise", "onetime"],
+    "icon": "shield",
+    "color": "#1565c0"
+  },
+  {
+    "id": "api_security",
+    "name": "API Security Scan",
+    "description": "Focused testing for REST APIs, GraphQL, and other API endpoints. Covers JWT vulnerabilities, CORS misconfiguration, authentication bypass, mass assignment, and API-specific OWASP Top 10.",
+    "template_tags": ["api", "graphql", "rest", "swagger", "oauth", "jwt", "cors", "ssrf"],
+    "severity_filter": ["critical", "high", "medium"],
+    "exclude_tags": ["dos"],
+    "estimated_duration_minutes": 45,
+    "available_in_plans": ["starter", "professional", "enterprise", "onetime"],
+    "icon": "code",
+    "color": "#7b1fa2"
+  },
+  {
+    "id": "full_scan",
+    "name": "Full Security Assessment",
+    "description": "Complete scan including CVEs, misconfigurations, exposed admin panels, all vulnerability categories, technology fingerprinting, and subdomain takeover checks. Most thorough assessment available.",
+    "template_tags": ["owasp", "cve", "exposure", "misconfig", "default-login", "panel", "takeover", "tech", "vuln", "api"],
+    "severity_filter": ["critical", "high", "medium", "low", "info"],
+    "exclude_tags": ["dos", "intrusive"],
+    "estimated_duration_minutes": 120,
+    "available_in_plans": ["professional", "enterprise", "onetime"],
+    "icon": "search",
+    "color": "#0d1b2a"
+  },
+  {
+    "id": "compliance_pci",
+    "name": "PCI-DSS Compliance Scan",
+    "description": "Security scans mapped to PCI-DSS 4.0 requirements. Tests for injection vulnerabilities, authentication weaknesses, cryptographic failures, and misconfigurations relevant to cardholder data environments.",
+    "template_tags": ["owasp", "injection", "misconfig", "crypto", "auth", "exposure", "sqli", "xss"],
+    "severity_filter": ["critical", "high", "medium"],
+    "exclude_tags": ["dos"],
+    "estimated_duration_minutes": 60,
+    "available_in_plans": ["professional", "enterprise"],
+    "compliance_frameworks": ["pci_dss"],
+    "icon": "credit-card",
+    "color": "#1b5e20"
+  },
+  {
+    "id": "compliance_hipaa",
+    "name": "HIPAA Security Scan",
+    "description": "Scans aligned to HIPAA Security Rule technical safeguards. Covers authentication controls, encryption in transit, access controls, and audit trail requirements for ePHI systems.",
+    "template_tags": ["auth", "crypto", "ssl", "tls", "access-control", "exposure", "owasp"],
+    "severity_filter": ["critical", "high", "medium"],
+    "exclude_tags": ["dos"],
+    "estimated_duration_minutes": 60,
+    "available_in_plans": ["professional", "enterprise"],
+    "compliance_frameworks": ["hipaa"],
+    "icon": "heart",
+    "color": "#b71c1c"
+  },
+  {
+    "id": "ai_and_api",
+    "name": "AI & Modern API Security",
+    "description": "Tests AI/ML endpoints, LLM APIs, chatbot interfaces, and modern API patterns including WebSockets, gRPC, and GraphQL subscriptions. Covers prompt injection, model data extraction, and API-specific vulnerabilities.",
+    "template_tags": ["ai", "llm", "api", "graphql", "websocket", "grpc"],
+    "severity_filter": ["critical", "high", "medium", "low"],
+    "exclude_tags": ["dos"],
+    "estimated_duration_minutes": 40,
+    "available_in_plans": ["professional", "enterprise"],
+    "icon": "cpu",
+    "color": "#4a148c"
+  },
+  {
+    "id": "cve_scan",
+    "name": "CVE & Known Vulnerability Scan",
+    "description": "Scans for known CVEs in web technologies, frameworks, CMS platforms, and server software. Identifies unpatched vulnerabilities with public exploits.",
+    "template_tags": ["cve", "vuln", "tech"],
+    "severity_filter": ["critical", "high", "medium"],
+    "exclude_tags": ["dos", "intrusive"],
+    "estimated_duration_minutes": 60,
+    "available_in_plans": ["starter", "professional", "enterprise"],
+    "icon": "alert-triangle",
+    "color": "#e64a19"
+  }
+]
