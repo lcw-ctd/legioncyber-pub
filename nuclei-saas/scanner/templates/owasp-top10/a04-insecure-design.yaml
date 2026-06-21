@@ -1,0 +1,192 @@
+id: a04-insecure-design
+
+info:
+  name: A04:2021 - Insecure Design
+  author: legioncyber
+  severity: medium
+  description: |
+    Tests for insecure design issues including missing rate limiting on authentication
+    endpoints, predictable resource locations, and business logic flaws such as accepting
+    negative quantities or zero-price values. Maps to OWASP Top 10 2021 A04.
+  tags: owasp,a04,insecure-design,rate-limit,business-logic
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N
+    cvss-score: 6.5
+    cwe-id: CWE-400
+    owasp-id: A04-2021
+
+requests:
+  # -----------------------------------------------------------------------
+  # Missing rate limiting — login endpoint accepts rapid requests
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/api/login"
+      - "{{BaseURL}}/auth/login"
+      - "{{BaseURL}}/api/auth/token"
+      - "{{BaseURL}}/api/v1/login"
+    headers:
+      Content-Type: application/json
+    body: |
+      {"username": "ratetest@example.com", "password": "WrongPassw0rd!"}
+    threads: 10
+    race: true
+    race_count: 20
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 401
+          - 403
+      - type: word
+        words:
+          - "rate limit"
+          - "too many requests"
+          - "429"
+          - "Retry-After"
+          - "X-RateLimit-Remaining"
+        negative: true
+        condition: or
+        part: header
+
+  # -----------------------------------------------------------------------
+  # Password reset — no rate limit / predictable token
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/forgot-password"
+      - "{{BaseURL}}/api/password/reset"
+      - "{{BaseURL}}/auth/forgot"
+    headers:
+      Content-Type: application/json
+    body: |
+      {"email": "admin@example.com"}
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "rate limit"
+          - "too many"
+          - "Retry-After"
+        negative: true
+        part: header
+
+  # -----------------------------------------------------------------------
+  # Business logic — negative quantity in order/cart
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/cart/add"
+      - "{{BaseURL}}/api/order"
+      - "{{BaseURL}}/cart/update"
+      - "{{BaseURL}}/api/v1/order/create"
+    headers:
+      Content-Type: application/json
+    body: |
+      {"product_id": 1, "quantity": -1, "price": 9.99}
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+      - type: word
+        words:
+          - "success"
+          - "order_id"
+          - "cart"
+          - "added"
+          - "total"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # Business logic — zero-price purchase accepted
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/checkout"
+      - "{{BaseURL}}/api/order/create"
+      - "{{BaseURL}}/checkout"
+    headers:
+      Content-Type: application/json
+    body: |
+      {"product_id": 1, "quantity": 1, "price": 0, "total": 0}
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+      - type: word
+        words:
+          - "order_id"
+          - "confirmation"
+          - "success"
+          - "payment"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # Predictable resource location — sequential invoice / file IDs
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/invoice/000001"
+      - "{{BaseURL}}/invoice/000002"
+      - "{{BaseURL}}/report/001"
+      - "{{BaseURL}}/files/001.pdf"
+      - "{{BaseURL}}/api/export/1"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "invoice"
+          - "report"
+          - "total"
+          - "billing"
+          - "pdf"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # OTP / 2FA brute-force — no lockout
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/verify-otp"
+      - "{{BaseURL}}/api/auth/otp"
+      - "{{BaseURL}}/2fa/verify"
+    headers:
+      Content-Type: application/json
+    body: |
+      {"otp": "000000"}
+    threads: 5
+    race: true
+    race_count: 10
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 400
+          - 401
+      - type: word
+        words:
+          - "locked"
+          - "too many"
+          - "rate limit"
+          - "blocked"
+        negative: true
+        part: body
+        case-insensitive: true

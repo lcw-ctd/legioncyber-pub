@@ -1,0 +1,183 @@
+id: a06-vulnerable-components
+
+info:
+  name: A06:2021 - Vulnerable and Outdated Components
+  author: legioncyber
+  severity: medium
+  description: |
+    Tests for exposed version information in headers and response bodies, known-vulnerable
+    library indicators, and exposed package manager / dependency files.
+    Maps to OWASP Top 10 2021 A06.
+  tags: owasp,a06,tech,version,outdated,cve,exposure
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-1104
+    owasp-id: A06-2021
+
+requests:
+  # -----------------------------------------------------------------------
+  # Server version disclosure in headers
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        regex:
+          - "(?i)Server: Apache/[12]\\.[0-3]\\."
+          - "(?i)Server: nginx/1\\.[0-9]\\."
+          - "(?i)X-Powered-By: PHP/[5-7]\\."
+          - "(?i)X-Powered-By: ASP\\.NET"
+          - "(?i)X-Generator: Drupal [67]"
+          - "(?i)X-Drupal-Cache"
+        part: header
+    extractors:
+      - type: regex
+        name: server_version
+        regex:
+          - "Server: [^\r\n]+"
+          - "X-Powered-By: [^\r\n]+"
+          - "X-Generator: [^\r\n]+"
+        part: header
+
+  # -----------------------------------------------------------------------
+  # Exposed package manager / dependency files
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/package.json"
+      - "{{BaseURL}}/composer.json"
+      - "{{BaseURL}}/composer.lock"
+      - "{{BaseURL}}/Gemfile"
+      - "{{BaseURL}}/Gemfile.lock"
+      - "{{BaseURL}}/requirements.txt"
+      - "{{BaseURL}}/Pipfile"
+      - "{{BaseURL}}/Pipfile.lock"
+      - "{{BaseURL}}/go.sum"
+      - "{{BaseURL}}/go.mod"
+      - "{{BaseURL}}/pom.xml"
+      - "{{BaseURL}}/build.gradle"
+      - "{{BaseURL}}/yarn.lock"
+      - "{{BaseURL}}/package-lock.json"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "dependencies"
+          - "version"
+          - "require"
+          - "\"name\""
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # jQuery known-vulnerable version in HTML source
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/index.html"
+      - "{{BaseURL}}/index.php"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        regex:
+          - "jquery[.-]([01]\\.[0-9]+|2\\.[0-2]\\.[0-9]+|3\\.[0-4]\\.[0-9]+)\\.min\\.js"
+          - "bootstrap[.-]([23]\\.[0-9]+)\\.min\\.(js|css)"
+          - "angular\\.js/(1\\.[0-6]\\.[0-9]+)"
+        part: body
+    extractors:
+      - type: regex
+        name: vulnerable_library
+        regex:
+          - "jquery[.-][0-9]+\\.[0-9]+\\.[0-9]+\\.min\\.js"
+          - "bootstrap[.-][0-9]+\\.[0-9]+\\.[0-9]+\\.min\\.js"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # CMS version disclosure (WordPress, Drupal, Joomla)
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/wp-login.php"
+      - "{{BaseURL}}/wp-includes/js/wp-emoji-release.min.js"
+      - "{{BaseURL}}/CHANGELOG.txt"
+      - "{{BaseURL}}/CHANGELOG.md"
+      - "{{BaseURL}}/core/CHANGELOG.txt"
+      - "{{BaseURL}}/administrator/manifests/files/joomla.xml"
+      - "{{BaseURL}}/readme.html"
+      - "{{BaseURL}}/README.txt"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        regex:
+          - "(?i)WordPress (3\\.|4\\.[0-8]|5\\.[0-7])"
+          - "(?i)Drupal (6|7|8)\\."
+          - "(?i)Joomla! (2|3)\\.[0-9]"
+          - "(?i)ver:[0-9]+\\.[0-9]+"
+        part: body
+    extractors:
+      - type: regex
+        name: cms_version
+        regex:
+          - "(?i)(WordPress|Drupal|Joomla!)\\s+[0-9]+\\.[0-9]+\\.?[0-9]*"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Exposed .npm, .bower, grunt/gulp config
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/.npmrc"
+      - "{{BaseURL}}/.bowerrc"
+      - "{{BaseURL}}/bower.json"
+      - "{{BaseURL}}/Gruntfile.js"
+      - "{{BaseURL}}/Gulpfile.js"
+      - "{{BaseURL}}/webpack.config.js"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "registry"
+          - "dependencies"
+          - "devDependencies"
+          - "scripts"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # PHP info page exposed
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/phpinfo.php"
+      - "{{BaseURL}}/info.php"
+      - "{{BaseURL}}/php-info.php"
+      - "{{BaseURL}}/test.php"
+      - "{{BaseURL}}/i.php"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "PHP Version"
+          - "phpinfo()"
+          - "PHP License"
+        condition: or
+        part: body

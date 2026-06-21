@@ -1,0 +1,156 @@
+id: a02-cryptographic-failures
+
+info:
+  name: A02:2021 - Cryptographic Failures
+  author: legioncyber
+  severity: high
+  description: |
+    Tests for cryptographic failures including HTTP endpoints exposing sensitive data,
+    missing HSTS, weak TLS, cleartext passwords in responses, and insecure cookie flags.
+    Maps to OWASP Top 10 2021 A02.
+  tags: owasp,a02,crypto,tls,hsts,cleartext,ssl
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N
+    cvss-score: 5.9
+    cwe-id: CWE-311
+    owasp-id: A02-2021
+
+requests:
+  # -----------------------------------------------------------------------
+  # Missing HSTS header
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+      - type: word
+        words:
+          - "Strict-Transport-Security"
+        negative: true
+        part: header
+
+  # -----------------------------------------------------------------------
+  # Missing Secure flag on session cookies
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/login"
+    matchers-condition: and
+    matchers:
+      - type: word
+        words:
+          - "Set-Cookie:"
+        part: header
+      - type: regex
+        regex:
+          - "Set-Cookie:[^\r\n]+(?i:session|auth|token|jwt)[^\r\n]*(?!Secure)"
+        part: raw
+        negative: false
+
+  # -----------------------------------------------------------------------
+  # HTTP (not HTTPS) serving sensitive login forms
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "http://{{Hostname}}/login"
+      - "http://{{Hostname}}/signin"
+      - "http://{{Hostname}}/account/login"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "password"
+          - "type=\"password\""
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Cleartext credentials / sensitive data in response body
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/users"
+      - "{{BaseURL}}/api/user/profile"
+      - "{{BaseURL}}/api/config"
+      - "{{BaseURL}}/api/settings"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        regex:
+          - '"password"\s*:\s*"[^"]{4,}"'
+          - '"passwd"\s*:\s*"[^"]{4,}"'
+          - '"secret"\s*:\s*"[^"]{4,}"'
+          - '"private_key"\s*:\s*"[^"]{4,}"'
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Weak TLS version detection (SSLv3 / TLS 1.0 banner)
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "SSL_version=SSLv3"
+          - "TLSv1.0"
+          - "ECDHE-RSA-RC4"
+        part: header
+      - type: word
+        words:
+          - "TLSv1.0"
+          - "SSLv3"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Mixed content indicators in HTML
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/index.html"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        regex:
+          - 'src="http://[^"]+\.(js|css)"'
+          - 'href="http://[^"]+\.(css)"'
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Exposed private keys or certificates in accessible paths
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/.well-known/private.key"
+      - "{{BaseURL}}/server.key"
+      - "{{BaseURL}}/private.pem"
+      - "{{BaseURL}}/ssl/private.key"
+      - "{{BaseURL}}/cert.pem"
+      - "{{BaseURL}}/.ssh/id_rsa"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "-----BEGIN RSA PRIVATE KEY-----"
+          - "-----BEGIN PRIVATE KEY-----"
+          - "-----BEGIN EC PRIVATE KEY-----"
+          - "-----BEGIN OPENSSH PRIVATE KEY-----"
+        part: body

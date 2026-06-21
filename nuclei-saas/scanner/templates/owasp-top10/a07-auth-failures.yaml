@@ -1,0 +1,218 @@
+id: a07-auth-failures
+
+info:
+  name: A07:2021 - Identification and Authentication Failures
+  author: legioncyber
+  severity: high
+  description: |
+    Tests for authentication failures including login endpoint enumeration, weak password
+    policies, missing account lockout, JWT vulnerabilities (alg:none, weak HS256), and
+    session fixation indicators. Maps to OWASP Top 10 2021 A07.
+  tags: owasp,a07,auth,jwt,session,default-password,weak-password
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 8.1
+    cwe-id: CWE-287
+    owasp-id: A07-2021
+
+requests:
+  # -----------------------------------------------------------------------
+  # User enumeration via different error messages
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/api/login"
+      - "{{BaseURL}}/auth/login"
+    headers:
+      Content-Type: application/json
+    body: |
+      {"username": "nonexistent_user_xyz_12345@example.com", "password": "WrongPass!123"}
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 401
+      - type: word
+        words:
+          - "user not found"
+          - "no account"
+          - "email not registered"
+          - "username does not exist"
+          - "invalid username"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # JWT algorithm confusion — accept "none" algorithm
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/profile"
+      - "{{BaseURL}}/api/me"
+      - "{{BaseURL}}/api/user"
+    headers:
+      # JWT with alg:none, sub:admin — base64url({"alg":"none","typ":"JWT"}).base64url({"sub":"1","role":"admin","iat":1700000000}).
+      Authorization: "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzAwMDAwMDAwfQ."
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "admin"
+          - "email"
+          - "username"
+          - "profile"
+          - "user_id"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # Weak JWT secret (HS256 signed with "secret" or "password")
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/profile"
+      - "{{BaseURL}}/api/me"
+      - "{{BaseURL}}/dashboard"
+    headers:
+      # HS256 token signed with key "secret", payload {"sub":"1","role":"admin"}
+      Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIn0.5B4RBzq7JcgEBdD7iFXuDtw0VajVBR6zGJ4PPvnKAXo"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "email"
+          - "username"
+          - "profile"
+          - "admin"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # Default credentials — common admin accounts
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/login"
+      - "{{BaseURL}}/login"
+    headers:
+      Content-Type: application/json
+    payloads:
+      credentials:
+        - '{"username":"admin","password":"admin"}'
+        - '{"username":"admin","password":"password"}'
+        - '{"username":"admin","password":"admin123"}'
+        - '{"username":"admin","password":"123456"}'
+        - '{"username":"root","password":"root"}'
+        - '{"username":"admin","password":"changeme"}'
+    attack: clusterbomb
+    body: "{{credentials}}"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "token"
+          - "access_token"
+          - "dashboard"
+          - "success"
+          - "authenticated"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # Missing account lockout (brute-force 20 attempts, no 429)
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/api/login"
+    headers:
+      Content-Type: application/json
+    body: |
+      {"username": "admin@example.com", "password": "WrongPass{{randstr}}"}
+    threads: 5
+    race: true
+    race_count: 20
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 400
+          - 401
+      - type: word
+        words:
+          - "locked"
+          - "too many"
+          - "rate limit"
+          - "429"
+          - "blocked"
+          - "Retry-After"
+        condition: or
+        negative: true
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # Session fixation — session ID unchanged after login
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/auth/login"
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      Cookie: "PHPSESSID=fixedtestsessionid12345; session=fixedtestsessionid12345"
+    body: "username=admin&password=admin"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+      - type: word
+        words:
+          - "fixedtestsessionid12345"
+        part: header
+
+  # -----------------------------------------------------------------------
+  # Exposed password reset token in URL
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/reset-password?token=abc123"
+      - "{{BaseURL}}/api/auth/reset?token=abc123"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "password"
+          - "reset"
+          - "new password"
+          - "confirm password"
+        condition: or
+        part: body
+        case-insensitive: true
+    extractors:
+      - type: regex
+        name: token_in_url
+        regex:
+          - "token=[a-zA-Z0-9_-]+"
+        part: request

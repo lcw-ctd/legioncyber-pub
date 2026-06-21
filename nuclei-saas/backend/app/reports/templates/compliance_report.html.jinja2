@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compliance Security Report — {{ organization.name }}</title>
+  <style>
+    :root {
+      --navy:        #0d1b2a;
+      --navy-mid:    #1b2d45;
+      --blue:        #1565c0;
+      --blue-light:  #1e88e5;
+      --steel:       #455a64;
+      --silver:      #eceff1;
+      --white:       #ffffff;
+      --critical:    #b71c1c;
+      --high:        #e64a19;
+      --medium:      #f57c00;
+      --low:         #1976d2;
+      --info:        #546e7a;
+      --pass:        #2e7d32;
+      --pass-light:  #e8f5e9;
+      --fail:        #c62828;
+      --fail-light:  #ffebee;
+      --partial:     #f57c00;
+      --partial-light:#fff3e0;
+      --text:        #212121;
+      --text-light:  #546e7a;
+      --border:      #cfd8dc;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-size: 9.5pt;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--white);
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 0;
+      page-break-after: always;
+      position: relative;
+    }
+
+    @page { size: A4; margin: 18mm 16mm 22mm 16mm; }
+    @media print {
+      .page { width: 100%; page-break-after: always; }
+      .no-break { page-break-inside: avoid; }
+    }
+
+    /* Cover */
+    .cover {
+      background: linear-gradient(135deg, var(--navy) 0%, #1b3a5c 60%, #0a3060 100%);
+      color: var(--white);
+      height: 297mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 48px 52px;
+    }
+
+    .cover-header { display: flex; align-items: center; gap: 14px; }
+
+    .cover-logo {
+      width: 44px; height: 44px;
+      background: var(--white);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 18px;
+      color: var(--navy);
+    }
+
+    .cover-logo-text  { font-size: 17px; font-weight: 700; }
+    .cover-logo-sub   { font-size: 10px; opacity: 0.6; letter-spacing: 1.5px; text-transform: uppercase; }
+
+    .cover-center { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 60px 0; }
+
+    .cover-report-type {
+      font-size: 9pt; letter-spacing: 3px; text-transform: uppercase; opacity: 0.5; margin-bottom: 10px;
+    }
+
+    .cover-title   { font-size: 32pt; font-weight: 800; line-height: 1.15; margin-bottom: 8px; }
+    .cover-subtitle { font-size: 13pt; font-weight: 300; opacity: 0.7; margin-bottom: 36px; }
+
+    .cover-org {
+      font-size: 16pt; font-weight: 600;
+      padding: 16px 20px;
+      background: rgba(255,255,255,0.07);
+      border-left: 4px solid var(--blue-light);
+      margin-bottom: 10px;
+    }
+
+    .cover-framework-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 20px;
+    }
+
+    .fw-badge {
+      padding: 4px 12px;
+      border: 1.5px solid rgba(255,255,255,0.3);
+      border-radius: 20px;
+      font-size: 8.5pt;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: rgba(255,255,255,0.85);
+    }
+
+    .cover-meta {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 40px;
+    }
+
+    .cover-meta-item label { display: block; font-size: 7.5pt; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.45; margin-bottom: 3px; }
+    .cover-meta-item span  { font-size: 10pt; font-weight: 500; }
+    .cover-footer          { opacity: 0.4; font-size: 7.5pt; }
+
+    /* Content pages */
+    .content-page { padding: 32px 44px 48px; }
+
+    .page-header {
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 2px solid var(--navy);
+      padding-bottom: 8px; margin-bottom: 24px;
+    }
+
+    .page-header-left, .page-header-right { font-size: 7.5pt; color: var(--text-light); }
+    .page-header-right { text-align: right; }
+
+    .page-footer {
+      position: absolute;
+      bottom: 18px; left: 44px; right: 44px;
+      display: flex; justify-content: space-between;
+      font-size: 7pt; color: var(--text-light);
+      border-top: 1px solid var(--border);
+      padding-top: 6px;
+    }
+
+    /* Typography */
+    h1 { font-size: 18pt; font-weight: 700; color: var(--navy); margin-bottom: 14px; }
+    h2 { font-size: 13pt; font-weight: 700; color: var(--navy); margin: 24px 0 10px; border-left: 4px solid var(--blue); padding-left: 10px; }
+    h3 { font-size: 10.5pt; font-weight: 600; color: var(--navy-mid); margin: 16px 0 6px; }
+    p  { margin-bottom: 8px; }
+
+    .section-label { font-size: 7.5pt; letter-spacing: 2px; text-transform: uppercase; color: var(--blue); font-weight: 600; margin-bottom: 4px; }
+
+    /* Status badges */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 7.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge-pass    { background: var(--pass);     color: var(--white); }
+    .badge-fail    { background: var(--fail);     color: var(--white); }
+    .badge-partial { background: var(--partial);  color: var(--white); }
+    .badge-critical { background: var(--critical); color: var(--white); }
+    .badge-high    { background: var(--high);     color: var(--white); }
+    .badge-medium  { background: var(--medium);   color: var(--white); }
+    .badge-low     { background: var(--low);       color: var(--white); }
+    .badge-info    { background: var(--info);     color: var(--white); }
+
+    /* Summary scorecard */
+    .scorecard-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin: 14px 0 24px;
+    }
+
+    .scorecard {
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .scorecard.passing { background: var(--pass-light); border-color: #81c784; }
+    .scorecard.partial { background: var(--partial-light); border-color: #ffb74d; }
+    .scorecard.failing { background: var(--fail-light); border-color: #ef9a9a; }
+
+    .scorecard-framework { font-size: 9pt; font-weight: 700; color: var(--navy); margin-bottom: 8px; }
+    .scorecard-version   { font-size: 7.5pt; color: var(--text-light); }
+
+    .scorecard-score {
+      font-size: 28pt;
+      font-weight: 800;
+      line-height: 1;
+      margin: 8px 0 4px;
+    }
+
+    .passing .scorecard-score { color: var(--pass); }
+    .partial .scorecard-score { color: var(--partial); }
+    .failing .scorecard-score { color: var(--fail); }
+
+    .scorecard-progress {
+      width: 100%; height: 5px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 6px 0 4px;
+    }
+
+    .scorecard-bar { height: 100%; border-radius: 3px; }
+    .passing .scorecard-bar { background: var(--pass); }
+    .partial .scorecard-bar { background: var(--partial); }
+    .failing .scorecard-bar { background: var(--fail); }
+
+    .scorecard-counts { font-size: 7.5pt; color: var(--text-light); }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 18px;
+      font-size: 8.5pt;
+    }
+
+    thead tr { background: var(--navy); color: var(--white); }
+    thead th { padding: 8px 10px; text-align: left; font-weight: 600; font-size: 8pt; }
+    tbody tr:nth-child(even) { background: var(--silver); }
+    tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+
+    /* Requirement rows */
+    .req-row-pass    { background: #f1f8e9 !important; }
+    .req-row-fail    { background: #ffebee !important; }
+    .req-row-partial { background: #fff8e1 !important; }
+
+    .req-id   { font-weight: 700; color: var(--navy); font-family: "Courier New", monospace; font-size: 8pt; }
+    .req-desc { font-size: 8pt; color: var(--text-light); margin-top: 2px; }
+
+    /* Evidence links */
+    .evidence-tag {
+      display: inline-block;
+      background: var(--navy);
+      color: var(--white);
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 7pt;
+      font-weight: 600;
+      margin: 1px 2px;
+    }
+
+    /* Gap analysis */
+    .gap-item {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      page-break-inside: avoid;
+    }
+
+    .gap-item.critical-gap { border-left: 4px solid var(--critical); background: var(--fail-light); }
+    .gap-item.high-gap     { border-left: 4px solid var(--high);     background: #fbe9e7; }
+    .gap-item.medium-gap   { border-left: 4px solid var(--medium);   background: var(--partial-light); }
+
+    .gap-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+    .gap-title  { font-weight: 700; font-size: 10pt; color: var(--navy); }
+    .gap-req    { font-size: 7.5pt; color: var(--text-light); margin-top: 2px; font-family: monospace; }
+    .gap-body   { font-size: 9pt; color: var(--text); margin-bottom: 6px; }
+    .gap-action { font-size: 8.5pt; color: var(--navy-mid); font-weight: 500; }
+    .gap-action strong { color: var(--fail); }
+
+    /* Priority table */
+    .priority-item {
+      display: flex;
+      gap: 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      margin-bottom: 8px;
+      align-items: flex-start;
+      page-break-inside: avoid;
+    }
+
+    .priority-num {
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      background: var(--navy);
+      color: var(--white);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10pt;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    .priority-content { flex: 1; }
+    .priority-title   { font-weight: 700; font-size: 9.5pt; color: var(--navy); margin-bottom: 3px; }
+    .priority-detail  { font-size: 8.5pt; color: var(--steel); }
+    .priority-frameworks { font-size: 7.5pt; color: var(--blue); margin-top: 3px; }
+
+    .callout {
+      background: #e3f2fd;
+      border-left: 4px solid var(--blue);
+      padding: 10px 14px;
+      border-radius: 0 4px 4px 0;
+      margin: 12px 0;
+      font-size: 9pt;
+    }
+
+    .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+    .text-center { text-align: center; }
+    .text-right  { text-align: right; }
+    .mt-4 { margin-top: 16px; }
+  </style>
+</head>
+<body>
+
+<!-- COVER PAGE -->
+<div class="page">
+  <div class="cover">
+    <div class="cover-header">
+      <div class="cover-logo">LC</div>
+      <div>
+        <div class="cover-logo-text">LegionCyber Shield</div>
+        <div class="cover-logo-sub">Security Platform</div>
+      </div>
+    </div>
+
+    <div class="cover-center">
+      <div class="cover-report-type">Compliance Security Report</div>
+      <div class="cover-title">Regulatory<br>Compliance<br>Assessment</div>
+      <div class="cover-subtitle">Gap analysis and audit evidence</div>
+      <div class="cover-org">{{ organization.name }}</div>
+
+      <div class="cover-framework-badges">
+        {% for fw in frameworks_assessed | default(["PCI-DSS 4.0", "HIPAA", "SOC 2", "ISO 27001", "NIST CSF", "GDPR"]) %}
+        <span class="fw-badge">{{ fw }}</span>
+        {% endfor %}
+      </div>
+
+      <div class="cover-meta">
+        <div class="cover-meta-item">
+          <label>Report Date</label>
+          <span>{{ report.generated_at | strftime("%B %d, %Y") }}</span>
+        </div>
+        <div class="cover-meta-item">
+          <label>Assessment Scope</label>
+          <span>{{ scan.target_url | truncate(30) }}</span>
+        </div>
+        <div class="cover-meta-item">
+          <label>Scan Plan</label>
+          <span>{{ scan.scan_plan_name }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="cover-footer">
+      Compliance Report — Confidential — {{ organization.name }} — LegionCyber Shield
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 2: COMPLIANCE SCORECARD OVERVIEW -->
+<div class="page">
+  <div class="content-page">
+    <div class="page-header">
+      <div class="page-header-left"><strong>{{ organization.name }}</strong> — Compliance Report</div>
+      <div class="page-header-right">{{ report.generated_at | strftime("%B %d, %Y") }}</div>
+    </div>
+
+    <div class="section-label">Section 01</div>
+    <h1>Compliance Scorecard</h1>
+
+    <p>
+      This report assesses <strong>{{ organization.name }}</strong>'s web application security posture
+      against {{ compliance_results | length if compliance_results is defined else "multiple" }} regulatory
+      frameworks. Findings from the {{ scan.scan_plan_name }} scan have been mapped to each framework's
+      technical security controls. Scores reflect the percentage of controls where no relevant findings
+      were detected.
+    </p>
+
+    <div class="callout">
+      <strong>Disclaimer:</strong> This automated assessment covers technical security controls that are
+      testable via external scanning. Organizational, administrative, and physical controls require
+      separate evaluation. This report does not constitute a formal compliance certification.
+    </div>
+
+    <!-- Scorecard grid -->
+    {% if compliance_results is defined and compliance_results %}
+    <div class="scorecard-grid">
+      {% for fw in compliance_results %}
+        {% set css_class = "passing" if fw.pass_rate >= 80 else ("partial" if fw.pass_rate >= 60 else "failing") %}
+      <div class="scorecard {{ css_class }}">
+        <div class="scorecard-framework">{{ fw.name }}</div>
+        <div class="scorecard-version">v{{ fw.version }}</div>
+        <div class="scorecard-score">{{ fw.pass_rate }}%</div>
+        <div class="scorecard-progress">
+          <div class="scorecard-bar" style="width:{{ fw.pass_rate }}%;"></div>
+        </div>
+        <div class="scorecard-counts">{{ fw.controls_passed }}/{{ fw.controls_total }} controls</div>
+        <div style="margin-top:8px;">
+          <span class="badge badge-{% if css_class == 'passing' %}pass{% elif css_class == 'partial' %}medium{% else %}fail{% endif %}">
+            {% if css_class == "passing" %}Compliant{% elif css_class == "partial" %}Partial{% else %}Non-Compliant{% endif %}
+          </span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Summary table -->
+    <h2>Framework Summary</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Framework</th>
+          <th>Version</th>
+          <th>Controls Tested</th>
+          <th class="text-center">Pass</th>
+          <th class="text-center">Fail</th>
+          <th class="text-center">Pass Rate</th>
+          <th>Status</th>
+          <th>Critical Gaps</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fw in compliance_results %}
+        <tr>
+          <td><strong>{{ fw.name }}</strong></td>
+          <td>{{ fw.version }}</td>
+          <td class="text-center">{{ fw.controls_total }}</td>
+          <td class="text-center" style="color:var(--pass);font-weight:700;">{{ fw.controls_passed }}</td>
+          <td class="text-center" style="color:var(--fail);font-weight:700;">{{ fw.controls_failed }}</td>
+          <td class="text-center"><strong>{{ fw.pass_rate }}%</strong></td>
+          <td>
+            <span class="badge badge-{% if fw.pass_rate >= 80 %}pass{% elif fw.pass_rate >= 60 %}partial{% else %}fail{% endif %}">
+              {% if fw.pass_rate >= 80 %}Passing{% elif fw.pass_rate >= 60 %}Partial{% else %}At Risk{% endif %}
+            </span>
+          </td>
+          <td style="color:var(--critical);">{{ fw.critical_gaps | default(0) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="callout">No compliance frameworks were assessed for this scan. Select a compliance-enabled scan plan to generate this report.</div>
+    {% endif %}
+
+    <div class="page-footer">
+      <span>LegionCyber Shield — Compliance Report — {{ organization.name }}</span>
+      <span>Page 2</span>
+    </div>
+  </div>
+</div>
+
+<!-- PAGES 3+: PER-FRAMEWORK DETAIL -->
+{% if compliance_results is defined %}
+{% for fw in compliance_results %}
+<div class="page">
+  <div class="content-page">
+    <div class="page-header">
+      <div class="page-header-left"><strong>{{ organization.name }}</strong> — Compliance Report: {{ fw.name }}</div>
+      <div class="page-header-right">{{ report.generated_at | strftime("%B %d, %Y") }}</div>
+    </div>
+
+    <div class="section-label">Framework Detail</div>
+    <h1>{{ fw.name }} <span style="font-size:14pt;font-weight:400;color:var(--text-light);">v{{ fw.version }}</span></h1>
+
+    <p>{{ fw.description | default("Framework requirements mapped to detected findings.") }}</p>
+
+    <!-- Requirements table -->
+    <h2>Requirements Assessment</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:90px;">Req. ID</th>
+          <th>Requirement Name</th>
+          <th style="width:60px;" class="text-center">Status</th>
+          <th style="width:70px;" class="text-center">Severity</th>
+          <th>Evidence (Findings)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for req in fw.requirements | default([]) %}
+          {% set status = "fail" if req.failing_findings else "pass" %}
+          {% set row_class = "req-row-fail" if status == "fail" else "req-row-pass" %}
+        <tr class="{{ row_class }}">
+          <td>
+            <span class="req-id">{{ req.id }}</span>
+          </td>
+          <td>
+            <strong>{{ req.name }}</strong>
+            <div class="req-desc">{{ req.description | truncate(100) }}</div>
+          </td>
+          <td class="text-center">
+            <span class="badge badge-{{ 'pass' if status == 'pass' else 'fail' }}">
+              {{ "Pass" if status == "pass" else "Fail" }}
+            </span>
+          </td>
+          <td class="text-center">
+            {% if req.max_severity %}
+            <span class="badge badge-{{ req.max_severity }}">{{ req.max_severity | title }}</span>
+            {% else %}
+            <span style="color:var(--text-light);">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if req.failing_findings %}
+              {% for f in req.failing_findings[:3] %}
+                <span class="evidence-tag">{{ f.name | truncate(25, killwords=True) }}</span>
+              {% endfor %}
+              {% if req.failing_findings | length > 3 %}
+                <span style="font-size:7pt;color:var(--text-light);">+{{ req.failing_findings | length - 3 }} more</span>
+              {% endif %}
+            {% else %}
+              <span style="color:var(--pass);font-size:8pt;">No violations detected</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="text-center" style="color:var(--text-light);padding:16px;">
+            No requirements data available for this framework.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="page-footer">
+      <span>LegionCyber Shield — Compliance Report — {{ organization.name }}</span>
+      <span>{{ fw.name }} Detail</span>
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+<!-- GAP ANALYSIS PAGE -->
+<div class="page">
+  <div class="content-page">
+    <div class="page-header">
+      <div class="page-header-left"><strong>{{ organization.name }}</strong> — Compliance Report</div>
+      <div class="page-header-right">{{ report.generated_at | strftime("%B %d, %Y") }}</div>
+    </div>
+
+    <div class="section-label">Section 02</div>
+    <h1>Gap Analysis</h1>
+
+    <p>
+      The following gaps represent areas where detected findings indicate non-compliance with one or more
+      regulatory framework requirements. Each gap is linked to specific findings and compliance controls.
+    </p>
+
+    {% if compliance_gaps is defined and compliance_gaps %}
+      {% for gap in compliance_gaps %}
+      <div class="gap-item {{ gap.severity | default('medium') }}-gap no-break">
+        <div class="gap-header">
+          <div>
+            <div class="gap-title">{{ gap.title }}</div>
+            <div class="gap-req">{{ gap.requirements | join(" · ") if gap.requirements else "" }}</div>
+          </div>
+          <span class="badge badge-{{ gap.severity | default('medium') }}">{{ gap.severity | default("Medium") | title }}</span>
+        </div>
+        <div class="gap-body">{{ gap.description }}</div>
+        <div class="gap-action">
+          <strong>Required action:</strong> {{ gap.remediation_action | default("Review and remediate the linked findings.") }}
+        </div>
+        {% if gap.affected_frameworks %}
+        <div style="margin-top:6px;font-size:7.5pt;color:var(--blue);">
+          Frameworks: {{ gap.affected_frameworks | join(", ") }}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="callout">
+        No compliance gaps identified based on current scan results. Continue monitoring with scheduled scans to maintain compliance posture.
+      </div>
+    {% endif %}
+
+    <hr class="divider" />
+
+    <div class="section-label mt-4">Section 03</div>
+    <h1>Remediation Priorities for Compliance</h1>
+
+    <p>Ordered by combined compliance impact and severity. Addressing these items will have the greatest positive effect on your overall compliance posture.</p>
+
+    {% if compliance_remediation_priorities is defined and compliance_remediation_priorities %}
+      {% for item in compliance_remediation_priorities %}
+      <div class="priority-item no-break">
+        <div class="priority-num">{{ loop.index }}</div>
+        <div class="priority-content">
+          <div class="priority-title">{{ item.title }}</div>
+          <div class="priority-detail">{{ item.description }}</div>
+          <div class="priority-frameworks">
+            Impacts: {{ item.frameworks | join(", ") if item.frameworks else "Multiple frameworks" }}
+            {% if item.effort %} &nbsp;|&nbsp; Effort: {{ item.effort }}{% endif %}
+          </div>
+        </div>
+        <span class="badge badge-{{ item.severity | default('medium') }}">{{ item.severity | default('Medium') | title }}</span>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="callout">
+        No remediation priorities generated — no compliance violations detected. Your current posture meets assessed requirements.
+      </div>
+    {% endif %}
+
+    <div class="page-footer">
+      <span>LegionCyber Shield — Compliance Report — {{ organization.name }}</span>
+      <span>Gap Analysis</span>
+    </div>
+  </div>
+</div>
+
+<!-- EVIDENCE & METHODOLOGY PAGE -->
+<div class="page">
+  <div class="content-page">
+    <div class="page-header">
+      <div class="page-header-left"><strong>{{ organization.name }}</strong> — Compliance Report</div>
+      <div class="page-header-right">{{ report.generated_at | strftime("%B %d, %Y") }}</div>
+    </div>
+
+    <div class="section-label">Section 04</div>
+    <h1>Evidence Summary</h1>
+
+    <p>The following table summarizes findings that directly contributed to compliance failures, grouped by severity.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Finding</th>
+          <th style="width:70px;" class="text-center">Severity</th>
+          <th>Matched URL</th>
+          <th>Compliance Frameworks</th>
+          <th>Requirements</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set compliance_findings = findings.items | selectattr("compliance_frameworks") | list if findings is defined else [] %}
+        {% for finding in compliance_findings %}
+        <tr>
+          <td><strong>{{ finding.name }}</strong></td>
+          <td class="text-center">
+            <span class="badge badge-{{ finding.severity }}">{{ finding.severity | title }}</span>
+          </td>
+          <td style="font-size:7.5pt;word-break:break-all;">{{ finding.matched_at | truncate(45) }}</td>
+          <td style="font-size:7.5pt;">{{ finding.compliance_frameworks | join(", ") }}</td>
+          <td style="font-size:7.5pt;">{{ finding.compliance_requirements | join(", ") if finding.compliance_requirements else "—" }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="text-center" style="color:var(--text-light);padding:16px;">
+            No findings with compliance mappings found, or no compliance violations detected.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <hr class="divider" />
+
+    <h2>Methodology & Scope</h2>
+
+    <p>
+      Compliance mapping is performed by correlating Nuclei template tags, CWE identifiers, and OWASP
+      categories with each framework's technical control requirements. The mapping database is maintained
+      by LegionCyber's security research team and updated with each platform release.
+    </p>
+
+    <h3>Assessment Limitations</h3>
+    <p>
+      This automated assessment covers technical security controls verifiable through external web application
+      scanning. The following control categories are <strong>out of scope</strong> for automated assessment
+      and require manual review:
+    </p>
+
+    <ul style="margin-left:20px;font-size:9pt;">
+      <li>Administrative and organizational controls (policies, training, vendor management)</li>
+      <li>Physical security controls (data center access, device disposal)</li>
+      <li>Internal network security (segmentation, internal access controls)</li>
+      <li>Personnel controls (background checks, separation of duties)</li>
+      <li>Incident response and business continuity procedures</li>
+      <li>Audit log review and monitoring procedures</li>
+    </ul>
+
+    <div class="callout" style="margin-top:16px;">
+      <strong>Next Steps:</strong> To achieve formal compliance certification, engage a Qualified Security Assessor (QSA)
+      for PCI-DSS, a HIPAA-experienced auditor for healthcare requirements, or an accredited SOC 2 auditor.
+      LegionCyber Shield provides the technical evidence foundation for these engagements.
+    </div>
+
+    <div class="page-footer">
+      <span>LegionCyber Shield — Compliance Report — {{ organization.name }}</span>
+      <span>Evidence &amp; Methodology</span>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

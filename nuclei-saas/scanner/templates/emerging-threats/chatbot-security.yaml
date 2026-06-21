@@ -1,0 +1,187 @@
+id: chatbot-security
+
+info:
+  name: Chatbot and AI Assistant Security
+  author: legioncyber
+  severity: high
+  description: |
+    Tests for chatbot and AI assistant security issues including API key exposure in frontend
+    code, misconfigured Intercom/Drift/Zendesk integrations, unauthenticated custom chatbot
+    backend endpoints, and webhook endpoints that accept arbitrary input without validation.
+  tags: chatbot,ai,intercom,drift,zendesk,exposure,api,webhook
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-312
+    owasp-id: A02-2021
+
+requests:
+  # -----------------------------------------------------------------------
+  # Chatbot API key / token exposed in frontend HTML/JS
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/index.html"
+      - "{{BaseURL}}/static/js/main.js"
+      - "{{BaseURL}}/assets/js/app.js"
+      - "{{BaseURL}}/js/bundle.js"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        regex:
+          - "(?i)intercom[_-]?app[_-]?id\\s*[=:]\\s*[\"'][a-zA-Z0-9]{8,}"
+          - "(?i)intercom[_-]?access[_-]?token\\s*[=:]\\s*[\"'][a-zA-Z0-9_-]{20,}"
+          - "(?i)drift[_-]?app[_-]?id\\s*[=:]\\s*[\"'][0-9]{4,}"
+          - "(?i)zendesk[_-]?key\\s*[=:]\\s*[\"'][a-zA-Z0-9_-]{10,}"
+          - "(?i)freshdesk[_-]?api[_-]?key\\s*[=:]\\s*[\"'][a-zA-Z0-9]{20,}"
+          - "(?i)crisp[_-]?website[_-]?id\\s*[=:]\\s*[\"'][a-f0-9-]{36}"
+          - "(?i)hubspot[_-]?portal[_-]?id\\s*[=:]\\s*[0-9]{5,}"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Intercom API misconfiguration — user identity verification disabled
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        regex:
+          - "Intercom\\(.*'boot'.*\\{[^}]*\\}"
+        part: body
+      - type: regex
+        regex:
+          - "user_hash"
+        negative: true
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Custom chatbot backend — unauthenticated message endpoint
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/chat"
+      - "{{BaseURL}}/api/chatbot"
+      - "{{BaseURL}}/api/bot"
+      - "{{BaseURL}}/api/assistant"
+      - "{{BaseURL}}/api/ask"
+      - "{{BaseURL}}/api/support/chat"
+      - "{{BaseURL}}/chat/message"
+      - "{{BaseURL}}/bot/query"
+    headers:
+      Content-Type: application/json
+    body: |
+      {"message": "Hello", "session_id": "probe-test-xyz"}
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "response"
+          - "message"
+          - "reply"
+          - "answer"
+          - "bot"
+          - "assistant"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # Webhook endpoint accepting arbitrary JSON without validation
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/webhook"
+      - "{{BaseURL}}/webhooks"
+      - "{{BaseURL}}/api/webhook"
+      - "{{BaseURL}}/api/webhooks"
+      - "{{BaseURL}}/hooks"
+      - "{{BaseURL}}/api/hooks"
+    headers:
+      Content-Type: application/json
+    body: |
+      {
+        "event": "probe_test",
+        "data": {"payload": "<script>alert(1)</script>"},
+        "source": "https://evil.example.com"
+      }
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+      - type: word
+        words:
+          - "received"
+          - "accepted"
+          - "ok"
+          - "processed"
+          - "success"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # Zendesk / Freshdesk SSO bypass indicators
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/auth/zendesk/callback"
+      - "{{BaseURL}}/auth/freshdesk/callback"
+      - "{{BaseURL}}/sso/login"
+      - "{{BaseURL}}/sso/callback"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "token"
+          - "jwt"
+          - "email"
+          - "authenticated"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # Chatbot training data / conversation history exposure
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/conversations"
+      - "{{BaseURL}}/api/chat/history"
+      - "{{BaseURL}}/api/messages"
+      - "{{BaseURL}}/api/bot/logs"
+      - "{{BaseURL}}/api/sessions"
+      - "{{BaseURL}}/admin/conversations"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "message"
+          - "conversation"
+          - "session"
+          - "timestamp"
+          - "user_id"
+          - "email"
+        condition: or
+        part: body
+        case-insensitive: true

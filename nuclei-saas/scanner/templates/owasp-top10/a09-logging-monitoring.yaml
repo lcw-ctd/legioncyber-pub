@@ -1,0 +1,182 @@
+id: a09-logging-monitoring
+
+info:
+  name: A09:2021 - Security Logging and Monitoring Failures
+  author: legioncyber
+  severity: low
+  description: |
+    Tests for logging and monitoring failures including exposed log files, log injection
+    possibilities via user-controlled input, and missing audit trail indicators.
+    Maps to OWASP Top 10 2021 A09.
+  tags: owasp,a09,log-exposure,log-injection,monitoring
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-778
+    owasp-id: A09-2021
+
+requests:
+  # -----------------------------------------------------------------------
+  # Exposed log files
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/logs/application.log"
+      - "{{BaseURL}}/logs/app.log"
+      - "{{BaseURL}}/logs/error.log"
+      - "{{BaseURL}}/logs/access.log"
+      - "{{BaseURL}}/logs/debug.log"
+      - "{{BaseURL}}/application.log"
+      - "{{BaseURL}}/error.log"
+      - "{{BaseURL}}/app.log"
+      - "{{BaseURL}}/debug.log"
+      - "{{BaseURL}}/var/log/app.log"
+      - "{{BaseURL}}/storage/logs/laravel.log"
+      - "{{BaseURL}}/log/production.log"
+      - "{{BaseURL}}/log/development.log"
+      - "{{BaseURL}}/wp-content/debug.log"
+      - "{{BaseURL}}/php_errors.log"
+      - "{{BaseURL}}/access_log"
+      - "{{BaseURL}}/error_log"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        regex:
+          - "(?i)\\[(ERROR|WARN|INFO|DEBUG|CRITICAL|FATAL)\\]"
+          - "(?i)Exception in thread"
+          - "(?i)Stack trace:"
+          - "(?i)\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}"
+          - "(?i)GET /|POST /|PUT /|DELETE /"
+          - "(?i)HTTP/1\\.[01] [0-9]{3}"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Log injection — CRLF injection via user-controlled input in logs
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/search?q=test%0d%0a[INJECTED LOG LINE] user=admin role=superuser"
+      - "{{BaseURL}}/login?redirect=%0d%0aINJECTED%3a%20admin%20logged%20in"
+      - "{{BaseURL}}/api/search?term=test%0aFake+log+entry:+admin+authenticated"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+          - 400
+      - type: word
+        words:
+          - "INJECTED LOG LINE"
+          - "INJECTED:"
+          - "Fake+log+entry"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Missing audit trail — sensitive actions without logging indication
+  # -----------------------------------------------------------------------
+  - method: DELETE
+    path:
+      - "{{BaseURL}}/api/user/1"
+      - "{{BaseURL}}/api/record/1"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+      - type: word
+        words:
+          - "X-Audit-Log"
+          - "X-Request-ID"
+          - "X-Correlation-ID"
+        negative: true
+        part: header
+
+  # -----------------------------------------------------------------------
+  # Exposed monitoring / metrics endpoints without auth
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/metrics"
+      - "{{BaseURL}}/actuator"
+      - "{{BaseURL}}/actuator/health"
+      - "{{BaseURL}}/actuator/metrics"
+      - "{{BaseURL}}/actuator/env"
+      - "{{BaseURL}}/actuator/logfile"
+      - "{{BaseURL}}/health"
+      - "{{BaseURL}}/debug/vars"
+      - "{{BaseURL}}/server-status"
+      - "{{BaseURL}}/server-info"
+      - "{{BaseURL}}/_cluster/health"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "heap"
+          - "gc"
+          - "threads"
+          - "memory"
+          - "uptime"
+          - "requests_total"
+          - "go_goroutines"
+          - "jvm"
+          - "environment"
+          - "properties"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # Prometheus / Grafana endpoints exposed
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/prometheus"
+      - "{{BaseURL}}/prometheus/metrics"
+      - "{{BaseURL}}/grafana"
+      - "{{BaseURL}}:3000"
+      - "{{BaseURL}}:9090/metrics"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "# HELP"
+          - "# TYPE"
+          - "Grafana"
+          - "prometheus_"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Backup / archived log files
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/logs/app.log.1"
+      - "{{BaseURL}}/logs/error.log.gz"
+      - "{{BaseURL}}/logs/access.log.2024"
+      - "{{BaseURL}}/application.log.bak"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "Content-Type: text/plain"
+          - "Content-Type: application/gzip"
+          - "Content-Type: application/x-gzip"
+        condition: or
+        part: header

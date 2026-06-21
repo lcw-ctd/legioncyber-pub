@@ -1,0 +1,191 @@
+id: a08-integrity-failures
+
+info:
+  name: A08:2021 - Software and Data Integrity Failures
+  author: legioncyber
+  severity: high
+  description: |
+    Tests for software and data integrity failures including unsigned update mechanisms,
+    exposed CI/CD pipeline configuration files, and deserialization endpoints that accept
+    untrusted data. Maps to OWASP Top 10 2021 A08.
+  tags: owasp,a08,deserialization,integrity,ci-exposure
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:H
+    cvss-score: 7.5
+    cwe-id: CWE-502
+    owasp-id: A08-2021
+
+requests:
+  # -----------------------------------------------------------------------
+  # Exposed CI/CD and source pipeline configuration files
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/.github/workflows/deploy.yml"
+      - "{{BaseURL}}/.github/workflows/ci.yml"
+      - "{{BaseURL}}/.github/workflows/main.yml"
+      - "{{BaseURL}}/.github/workflows/release.yml"
+      - "{{BaseURL}}/Jenkinsfile"
+      - "{{BaseURL}}/.gitlab-ci.yml"
+      - "{{BaseURL}}/.travis.yml"
+      - "{{BaseURL}}/circle.yml"
+      - "{{BaseURL}}/.circleci/config.yml"
+      - "{{BaseURL}}/azure-pipelines.yml"
+      - "{{BaseURL}}/bitbucket-pipelines.yml"
+      - "{{BaseURL}}/Makefile"
+      - "{{BaseURL}}/Dockerfile"
+      - "{{BaseURL}}/docker-compose.yml"
+      - "{{BaseURL}}/docker-compose.prod.yml"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "on:"
+          - "jobs:"
+          - "pipeline"
+          - "stages:"
+          - "deploy"
+          - "build"
+          - "FROM "
+          - "services:"
+          - "runs-on:"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Unsigned / HTTP software update endpoints
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/update"
+      - "{{BaseURL}}/update.php"
+      - "{{BaseURL}}/upgrade"
+      - "{{BaseURL}}/api/update"
+      - "{{BaseURL}}/api/upgrade"
+      - "{{BaseURL}}/wp-admin/update.php"
+      - "{{BaseURL}}/admin/upgrade"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "update"
+          - "upgrade"
+          - "install"
+          - "version"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # Java deserialization — vulnerable endpoints accepting serialized objects
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/deserialize"
+      - "{{BaseURL}}/rpc"
+      - "{{BaseURL}}/invoke"
+      - "{{BaseURL}}/api/object"
+      - "{{BaseURL}}/endpoint"
+    headers:
+      Content-Type: application/x-java-serialized-object
+    # Minimal Java serialized object magic bytes (base64-encoded \xac\xed\x00\x05)
+    body: "rO0ABQ=="
+    matchers-condition: or
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 500
+      - type: word
+        words:
+          - "ClassNotFoundException"
+          - "java.io.ObjectInputStream"
+          - "deserialization"
+          - "ObjectStreamException"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # PHP unserialize via common endpoints
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/load?data=O:8:\"stdClass\":0:{}"
+      - "{{BaseURL}}/cache?key=O:8:\"stdClass\":0:{}"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        regex:
+          - "(?i)__PHP_Incomplete_Class"
+          - "(?i)unserialize\\(\\)"
+          - "(?i)PHP Fatal error.*unserialize"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Exposed .git directory (source code integrity)
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/.git/HEAD"
+      - "{{BaseURL}}/.git/config"
+      - "{{BaseURL}}/.git/COMMIT_EDITMSG"
+      - "{{BaseURL}}/.git/index"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "ref: refs/"
+          - "[core]"
+          - "repositoryformatversion"
+          - "Merge branch"
+          - "commit"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Exposed SVN metadata
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/.svn/entries"
+      - "{{BaseURL}}/.svn/wc.db"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "svn"
+          - "format"
+          - "dir"
+          - "file"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Exposed npm publish token / npmrc with auth
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/.npmrc"
+      - "{{BaseURL}}/.yarnrc"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        regex:
+          - "_authToken\\s*=\\s*[a-zA-Z0-9_-]{20,}"
+          - "//registry\\.npmjs\\.org/:_authToken"
+        part: body

@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Executive Security Report — {{ organization.name }}</title>
+  <style>
+    /* =====================================================================
+       DESIGN TOKENS — Navy / Steel Blue palette
+       ===================================================================== */
+    :root {
+      --navy:        #0d1b2a;
+      --navy-mid:    #1b2d45;
+      --blue:        #1565c0;
+      --blue-light:  #1e88e5;
+      --steel:       #455a64;
+      --silver:      #eceff1;
+      --white:       #ffffff;
+      --critical:    #b71c1c;
+      --high:        #e64a19;
+      --medium:      #f57c00;
+      --low:         #1976d2;
+      --info:        #546e7a;
+      --pass:        #2e7d32;
+      --fail:        #c62828;
+      --text:        #212121;
+      --text-light:  #546e7a;
+      --border:      #cfd8dc;
+      --page-width:  210mm;
+    }
+
+    /* =====================================================================
+       RESET & BASE
+       ===================================================================== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-size: 10pt;
+      line-height: 1.55;
+      color: var(--text);
+      background: var(--white);
+    }
+
+    /* =====================================================================
+       PAGE LAYOUT
+       ===================================================================== */
+    .page {
+      width: var(--page-width);
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 0;
+      page-break-after: always;
+      position: relative;
+    }
+
+    @page {
+      size: A4;
+      margin: 20mm 18mm 22mm 18mm;
+    }
+
+    @media print {
+      body { background: var(--white); }
+      .page { width: 100%; page-break-after: always; }
+      .no-break { page-break-inside: avoid; }
+    }
+
+    /* =====================================================================
+       COVER PAGE
+       ===================================================================== */
+    .cover {
+      background: linear-gradient(160deg, var(--navy) 0%, var(--navy-mid) 55%, var(--blue) 100%);
+      color: var(--white);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 48px 52px;
+      height: 297mm;
+    }
+
+    .cover-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .cover-logo {
+      width: 48px;
+      height: 48px;
+      background: var(--white);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 20px;
+      color: var(--navy);
+      letter-spacing: -1px;
+    }
+
+    .cover-logo-text {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      opacity: 0.95;
+    }
+
+    .cover-logo-sub {
+      font-size: 11px;
+      opacity: 0.65;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    .cover-center {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 60px 0;
+    }
+
+    .cover-classification {
+      display: inline-block;
+      border: 1.5px solid rgba(255,255,255,0.4);
+      color: rgba(255,255,255,0.7);
+      font-size: 9pt;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 3px;
+      margin-bottom: 32px;
+      width: fit-content;
+    }
+
+    .cover-report-type {
+      font-size: 12pt;
+      font-weight: 400;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      opacity: 0.7;
+      margin-bottom: 14px;
+    }
+
+    .cover-title {
+      font-size: 36pt;
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+
+    .cover-subtitle {
+      font-size: 15pt;
+      font-weight: 300;
+      opacity: 0.8;
+      margin-bottom: 40px;
+    }
+
+    .cover-org {
+      font-size: 18pt;
+      font-weight: 600;
+      padding: 18px 24px;
+      background: rgba(255,255,255,0.08);
+      border-left: 4px solid var(--blue-light);
+      border-radius: 0 4px 4px 0;
+      margin-bottom: 12px;
+    }
+
+    .cover-meta {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 48px;
+    }
+
+    .cover-meta-item label {
+      display: block;
+      font-size: 8pt;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      opacity: 0.5;
+      margin-bottom: 4px;
+    }
+
+    .cover-meta-item span {
+      font-size: 11pt;
+      font-weight: 500;
+    }
+
+    .cover-footer {
+      opacity: 0.5;
+      font-size: 8pt;
+      letter-spacing: 0.5px;
+    }
+
+    /* =====================================================================
+       CONTENT PAGES — HEADER / FOOTER
+       ===================================================================== */
+    .content-page {
+      padding: 36px 48px 48px;
+    }
+
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid var(--navy);
+      padding-bottom: 10px;
+      margin-bottom: 32px;
+    }
+
+    .page-header-left {
+      font-size: 8pt;
+      color: var(--text-light);
+      letter-spacing: 0.5px;
+    }
+
+    .page-header-right {
+      font-size: 8pt;
+      color: var(--text-light);
+      letter-spacing: 0.5px;
+      text-align: right;
+    }
+
+    .page-footer {
+      position: absolute;
+      bottom: 20px;
+      left: 48px;
+      right: 48px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 7.5pt;
+      color: var(--text-light);
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+    }
+
+    /* =====================================================================
+       TYPOGRAPHY
+       ===================================================================== */
+    h1 { font-size: 20pt; font-weight: 700; color: var(--navy); margin-bottom: 16px; }
+    h2 { font-size: 14pt; font-weight: 700; color: var(--navy); margin: 28px 0 12px; border-left: 4px solid var(--blue); padding-left: 12px; }
+    h3 { font-size: 11pt; font-weight: 600; color: var(--navy-mid); margin: 20px 0 8px; }
+    p  { margin-bottom: 10px; }
+
+    .section-label {
+      font-size: 8pt;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--blue);
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    /* =====================================================================
+       KEY RISK INDICATOR (KRI) CARDS
+       ===================================================================== */
+    .kri-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin: 20px 0 28px;
+    }
+
+    .kri-card {
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 14px;
+      text-align: center;
+      background: var(--silver);
+    }
+
+    .kri-card.critical-card { border-color: var(--critical); background: #ffebee; }
+    .kri-card.risk-card     { border-color: var(--high);     background: #fbe9e7; }
+
+    .kri-value {
+      font-size: 28pt;
+      font-weight: 800;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .kri-card.critical-card .kri-value { color: var(--critical); }
+    .kri-card.risk-card .kri-value     { color: var(--high);     }
+    .kri-card:not(.critical-card):not(.risk-card) .kri-value { color: var(--navy); }
+
+    .kri-label {
+      font-size: 8pt;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--steel);
+      font-weight: 500;
+    }
+
+    .kri-trend {
+      font-size: 7.5pt;
+      margin-top: 6px;
+      color: var(--text-light);
+    }
+
+    /* =====================================================================
+       SEVERITY BADGE
+       ===================================================================== */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-critical { background: var(--critical); color: var(--white); }
+    .badge-high     { background: var(--high);     color: var(--white); }
+    .badge-medium   { background: var(--medium);   color: var(--white); }
+    .badge-low      { background: var(--low);       color: var(--white); }
+    .badge-info     { background: var(--info);      color: var(--white); }
+    .badge-pass     { background: var(--pass);      color: var(--white); }
+    .badge-fail     { background: var(--fail);      color: var(--white); }
+
+    /* =====================================================================
+       TABLES
+       ===================================================================== */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 20px;
+      font-size: 9.5pt;
+    }
+
+    thead tr {
+      background: var(--navy);
+      color: var(--white);
+    }
+
+    thead th {
+      padding: 9px 12px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 8.5pt;
+      letter-spacing: 0.5px;
+    }
+
+    tbody tr:nth-child(even) { background: var(--silver); }
+    tbody tr:hover            { background: #e3f2fd; }
+
+    tbody td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+
+    .severity-bar {
+      display: inline-block;
+      height: 8px;
+      border-radius: 4px;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    /* =====================================================================
+       FINDINGS CARDS
+       ===================================================================== */
+    .finding-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px 18px;
+      margin-bottom: 12px;
+      page-break-inside: avoid;
+    }
+
+    .finding-card.critical { border-left: 4px solid var(--critical); }
+    .finding-card.high     { border-left: 4px solid var(--high);     }
+
+    .finding-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .finding-title {
+      font-size: 10.5pt;
+      font-weight: 700;
+      color: var(--navy);
+      flex: 1;
+    }
+
+    .finding-meta {
+      font-size: 8pt;
+      color: var(--text-light);
+      margin-bottom: 6px;
+    }
+
+    .finding-meta span { margin-right: 16px; }
+
+    .finding-impact {
+      background: #fff8e1;
+      border-left: 3px solid #f9a825;
+      padding: 8px 12px;
+      border-radius: 0 4px 4px 0;
+      font-size: 9pt;
+      margin-top: 8px;
+    }
+
+    .finding-impact strong { color: var(--navy-mid); }
+
+    /* =====================================================================
+       OWASP HEATMAP
+       ===================================================================== */
+    .owasp-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin: 14px 0 22px;
+    }
+
+    .owasp-cell {
+      border-radius: 6px;
+      padding: 10px 8px;
+      text-align: center;
+      border: 1.5px solid transparent;
+    }
+
+    .owasp-cell.has-findings    { background: #ffebee; border-color: var(--critical); }
+    .owasp-cell.no-findings     { background: #e8f5e9; border-color: #81c784; }
+    .owasp-cell.not-tested      { background: var(--silver); border-color: var(--border); }
+
+    .owasp-id    { font-size: 8pt;   font-weight: 700; color: var(--navy); }
+    .owasp-name  { font-size: 7pt;   margin-top: 3px; color: var(--steel); line-height: 1.3; }
+    .owasp-count { font-size: 14pt;  font-weight: 800; margin-top: 4px; }
+    .owasp-cell.has-findings .owasp-count { color: var(--critical); }
+    .owasp-cell.no-findings  .owasp-count { color: var(--pass); }
+
+    /* =====================================================================
+       COMPLIANCE OVERVIEW
+       ===================================================================== */
+    .compliance-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin: 14px 0 22px;
+    }
+
+    .compliance-card {
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+    }
+
+    .compliance-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .compliance-framework {
+      font-weight: 700;
+      font-size: 10pt;
+      color: var(--navy);
+    }
+
+    .compliance-score {
+      font-size: 22pt;
+      font-weight: 800;
+      text-align: center;
+      margin: 6px 0 4px;
+    }
+
+    .compliance-score.high-score   { color: var(--pass); }
+    .compliance-score.medium-score { color: var(--medium); }
+    .compliance-score.low-score    { color: var(--fail); }
+
+    .compliance-progress {
+      width: 100%;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+
+    .compliance-progress-bar {
+      height: 100%;
+      border-radius: 3px;
+      background: var(--pass);
+    }
+
+    .compliance-progress-bar.medium { background: var(--medium); }
+    .compliance-progress-bar.low    { background: var(--fail); }
+
+    /* =====================================================================
+       REMEDIATION ROADMAP
+       ===================================================================== */
+    .roadmap-item {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 10px;
+      padding: 12px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      page-break-inside: avoid;
+    }
+
+    .roadmap-item.p1 { background: #ffebee; border-color: var(--critical); }
+    .roadmap-item.p2 { background: #fbe9e7; border-color: var(--high); }
+    .roadmap-item.p3 { background: #fff3e0; border-color: var(--medium); }
+
+    .roadmap-priority {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 11pt;
+      color: var(--white);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .p1 .roadmap-priority { background: var(--critical); }
+    .p2 .roadmap-priority { background: var(--high); }
+    .p3 .roadmap-priority { background: var(--medium); }
+
+    .roadmap-content { flex: 1; }
+    .roadmap-title   { font-weight: 700; font-size: 10pt; color: var(--navy); margin-bottom: 3px; }
+    .roadmap-desc    { font-size: 9pt; color: var(--steel); }
+    .roadmap-effort  { font-size: 8pt; color: var(--text-light); margin-top: 4px; }
+
+    /* =====================================================================
+       ABOUT SECTION
+       ===================================================================== */
+    .about-section {
+      background: var(--navy);
+      color: var(--white);
+      padding: 32px 48px;
+      margin-top: 32px;
+      border-radius: 8px;
+    }
+
+    .about-section h2 {
+      color: var(--white);
+      border-left-color: var(--blue-light);
+      margin-top: 0;
+    }
+
+    .about-section p { opacity: 0.85; margin-bottom: 10px; }
+
+    .about-contact {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .about-contact-item label {
+      display: block;
+      font-size: 8pt;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      opacity: 0.55;
+      margin-bottom: 3px;
+    }
+
+    .about-contact-item span {
+      font-size: 9.5pt;
+      font-weight: 500;
+    }
+
+    /* =====================================================================
+       UTILS
+       ===================================================================== */
+    .text-right   { text-align: right; }
+    .text-center  { text-align: center; }
+    .mt-4         { margin-top: 16px; }
+    .mb-4         { margin-bottom: 16px; }
+    .divider      { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+    .callout {
+      background: #e3f2fd;
+      border-left: 4px solid var(--blue);
+      padding: 12px 16px;
+      border-radius: 0 4px 4px 0;
+      margin: 14px 0;
+      font-size: 9.5pt;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===================================================================
+     PAGE 1: COVER
+     =================================================================== -->
+<div class="page">
+  <div class="cover">
+    <div class="cover-header">
+      <div class="cover-logo">LC</div>
+      <div>
+        <div class="cover-logo-text">LegionCyber</div>
+        <div class="cover-logo-sub">Shield Platform</div>
+      </div>
+    </div>
+
+    <div class="cover-center">
+      <div class="cover-classification">
+        {{ report.classification | default("Confidential") }}
+      </div>
+      <div class="cover-report-type">Executive Security Report</div>
+      <div class="cover-title">Security<br>Posture<br>Assessment</div>
+      <div class="cover-subtitle">Actionable intelligence for leadership</div>
+
+      <div class="cover-org">
+        {{ organization.name }}
+      </div>
+
+      <div class="cover-meta">
+        <div class="cover-meta-item">
+          <label>Report Date</label>
+          <span>{{ report.generated_at | strftime("%B %d, %Y") }}</span>
+        </div>
+        <div class="cover-meta-item">
+          <label>Scan Period</label>
+          <span>{{ scan.started_at | strftime("%b %d") }} – {{ scan.completed_at | strftime("%b %d, %Y") }}</span>
+        </div>
+        <div class="cover-meta-item">
+          <label>Target</label>
+          <span>{{ scan.target_url }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="cover-footer">
+      This report contains sensitive security information. Distribution is restricted to authorized personnel only.
+      &copy; {{ report.generated_at | strftime("%Y") }} LegionCyber, Inc. All rights reserved.
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================================
+     PAGE 2: EXECUTIVE SUMMARY + KRIs
+     =================================================================== -->
+<div class="page">
+  <div class="content-page">
+    <div class="page-header">
+      <div class="page-header-left">
+        <strong>{{ organization.name }}</strong> &nbsp;|&nbsp; Executive Security Report
+      </div>
+      <div class="page-header-right">
+        {{ report.generated_at | strftime("%B %d, %Y") }} &nbsp;|&nbsp; Confidential
+      </div>
+    </div>
+
+    <!-- Executive Summary -->
+    <div class="section-label">Section 01</div>
+    <h1>Executive Summary</h1>
+
+    <p>
+      LegionCyber Shield performed a {{ scan.scan_plan_name }} security assessment of
+      <strong>{{ scan.target_url }}</strong> on behalf of <strong>{{ organization.name }}</strong>.
+      The assessment ran {{ scan.total_templates | default("N/A") }} security checks covering
+      the OWASP Top 10, common vulnerability classes, and configuration weaknesses.
+    </p>
+
+    <p>
+      {{ summary.executive_paragraph | default("The assessment identified a number of security findings requiring attention. Critical and high severity issues should be remediated immediately to reduce organizational risk exposure. Medium severity findings should be scheduled for remediation within the next 30–60 days as part of normal security operations.") }}
+    </p>
+
+    <p>
+      The overall <strong>Security Risk Score</strong> for this assessment is
+      <strong style="color: {% if summary.risk_score >= 80 %}{{ 'var(--pass)' }}{% elif summary.risk_score >= 60 %}{{ 'var(--medium)' }}{% else %}{{ 'var(--critical)' }}{% endif %};">
+        {{ summary.risk_score | default("—") }} / 100
+      </strong>.
+      {% if summary.risk_score is defined %}
+        {% if summary.risk_score >= 80 %}
+          Your organization demonstrates a strong security posture with only minor gaps requiring attention.
+        {% elif summary.risk_score >= 60 %}
+          Your organization has a moderate security posture. Several medium-to-high severity issues require
+          structured remediation over the next 30–90 days.
+        {% else %}
+          Your organization has significant security gaps. Immediate action is required on critical findings
+          to reduce exposure to active exploitation.
+        {% endif %}
+      {% endif %}
+    </p>
+
+    <div class="callout">
+      <strong>Priority Action Required:</strong>
+      {% if findings.critical_count > 0 %}
+        {{ findings.critical_count }} critical
+        finding{{ 's' if findings.critical_count != 1 }} demand{{ '' if findings.critical_count != 1 else 's' }}
+        immediate attention and should be escalated to your engineering leadership today.
+      {% else %}
+        No critical findings were identified. Focus remediation efforts on the
+        {{ findings.high_count | default(0) }} high severity
+        finding{{ 's' if findings.high_count != 1 else '' }} within the next 14 days.
+      {% endif %}
+    </div>
+
+    <!-- Key Risk Indicators -->
+    <div class="section-label mt-4">Key Risk Indicators</div>
+    <h2>Risk at a Glance</h2>
+
+    <div class="kri-grid">
+      <div class="kri-card {% if findings.critical_count > 0 %}critical-card{% endif %}">
+        <div class="kri-value">{{ findings.total_count | default(0) }}</div>
+        <div class="kri-label">Total Findings</div>
+        <div class="kri-trend">Across all severity levels</div>
+      </div>
+      <div class="kri-card critical-card">
+        <div class="kri-value">{{ findings.critical_count | default(0) }}</div>
+        <div class="kri-label">Critical Issues</div>
+        <div class="kri-trend">Immediate action required</div>
+      </div>
+      <div class="kri-card">
+        <div class="kri-value">{{ summary.compliance_score | default("—") }}%</div>
+        <div class="kri-label">Compliance Score</div>
+        <div class="kri-trend">
+          {% if summary.frameworks_tested %}
+            {{ summary.frameworks_tested | join(", ") }}
+          {% else %}
+            Across tested frameworks
+          {% endif %}
+        </div>
+      </div>
+      <div class="kri-card risk-card">
+        <div class="kri-value">{{ summary.risk_score | default("—") }}</div>
+        <div class="kri-label">Risk Score</div>
+        <div class="kri-trend">Out of 100 (lower = worse)</div>
+      </div>
+    </div>
+
+    <!-- Findings Summary Table -->
+    <div class="section-label">Findings by Severity</div>
+    <h2>Findings Summary</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Severity</th>
+          <th>Count</th>
+          <th style="width:35%">Distribution</th>
+          <th class="text-right">% of Total</th>
+          <th>Recommended SLA</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set sev_rows = [
+          ("Critical", findings.critical_count | default(0), "critical", "#b71c1c", "Immediate (24h)"),
+          ("High",     findings.high_count     | default(0), "high",     "#e64a19", "7 days"),
+          ("Medium",   findings.medium_count   | default(0), "medium",   "#f57c00", "30 days"),
+          ("Low",      findings.low_count      | default(0), "low",      "#1976d2", "90 days"),
+          ("Info",     findings.info_count     | default(0), "info",     "#546e7a", "Next cycle"),
+        ] %}
+        {% for name, count, cls, color, sla in sev_rows %}
+        <tr>
+          <td><span class="badge badge-{{ cls }}">{{ name }}</span></td>
+          <td><strong>{{ count }}</strong></td>
+          <td>
+            {% if findings.total_count and findings.total_count > 0 %}
+            <div style="background:var(--border);height:10px;border-radius:5px;overflow:hidden;">
+              <div style="background:{{ color }};height:100%;width:{{ ((count / findings.total_count) * 100) | round(1) }}%;border-radius:5px;"></div>
+            </div>
+            {% endif %}
+          </td>
+          <td class="text-right">
+            {% if findings.total_count and findings.total_count > 0 %}
+              {{ ((count / findings.total_count) * 100) | round(1) }}%
+            {% else %}—{% endif %}
+          </td>
+          <td style="color:var(--text-light);">{{ sla }}</td>
+        </tr>
+        {% endfor %}
+        <tr style="background:var(--navy);color:var(--white);">
+          <td><strong>Total</strong></td>
+          <td><strong>{{ findings.total_count | default(0) }}</strong></td>
+          <td></td>
+          <td class="text-right"><strong>100%</strong></td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="page-footer">
+      <span>LegionCyber Shield &mdash; Confidential &mdash; {{ organization.name }}</span>
+      <span>Page 2</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================================
+     PAGE 3: TOP CRITICAL/HIGH FINDINGS
+     =================================================================== -->
+<div class="page">
+  <div class="content-page">
+    <div class="page-header">
+      <div class="page-header-left"><strong>{{ organization.name }}</strong> &nbsp;|&nbsp; Executive Security Report</div>
+      <div class="page-header-right">{{ report.generated_at | strftime("%B %d, %Y") }} &nbsp;|&nbsp; Confidential</div>
+    </div>
+
+    <div class="section-label">Section 02</div>
+    <h1>Top Priority Findings</h1>
+    <p>The following findings represent the highest business risk and should be escalated for immediate remediation.</p>
+
+    {% set top_findings = (findings.items | selectattr("severity", "in", ["critical", "high"]) | list)[:5] %}
+    {% if top_findings %}
+      {% for finding in top_findings %}
+      <div class="finding-card {{ finding.severity }} no-break">
+        <div class="finding-header">
+          <div class="finding-title">{{ loop.index }}. {{ finding.name }}</div>
+          <span class="badge badge-{{ finding.severity }}">{{ finding.severity | title }}</span>
+        </div>
+        <div class="finding-meta">
+          <span><strong>URL:</strong> {{ finding.matched_at | truncate(60) }}</span>
+          <span><strong>CVSS:</strong> {{ finding.cvss_score | default("N/A") }}</span>
+          {% if finding.cve_id %}<span><strong>CVE:</strong> {{ finding.cve_id }}</span>{% endif %}
+          {% if finding.cwe_id %}<span><strong>CWE:</strong> CWE-{{ finding.cwe_id }}</span>{% endif %}
+        </div>
+        <p style="font-size:9.5pt;">{{ finding.description | truncate(280) }}</p>
+        <div class="finding-impact">
+          <strong>Business Impact:</strong>
+          {{ finding.business_impact | default("This vulnerability could allow an attacker to compromise system integrity, exfiltrate sensitive data, or disrupt business operations.") }}
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="callout">
+        No critical or high severity findings were identified in this assessment. Review medium severity findings in the technical report.
+      </div>
+    {% endif %}
+
+    <div class="page-footer">
+      <span>LegionCyber Shield &mdash; Confidential &mdash; {{ organization.name }}</span>
+      <span>Page 3</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================================
+     PAGE 4: OWASP HEATMAP + COMPLIANCE OVERVIEW
+     =================================================================== -->
+<div class="page">
+  <div class="content-page">
+    <div class="page-header">
+      <div class="page-header-left"><strong>{{ organization.name }}</strong> &nbsp;|&nbsp; Executive Security Report</div>
+      <div class="page-header-right">{{ report.generated_at | strftime("%B %d, %Y") }} &nbsp;|&nbsp; Confidential</div>
+    </div>
+
+    <div class="section-label">Section 03</div>
+    <h1>OWASP Top 10 Coverage</h1>
+    <p>Findings mapped to OWASP Top 10 2021 vulnerability categories.</p>
+
+    {% set owasp_categories = [
+      ("A01", "Broken Access Control"),
+      ("A02", "Cryptographic Failures"),
+      ("A03", "Injection"),
+      ("A04", "Insecure Design"),
+      ("A05", "Security Misconfiguration"),
+      ("A06", "Vulnerable Components"),
+      ("A07", "Auth & Identity Failures"),
+      ("A08", "Data Integrity Failures"),
+      ("A09", "Logging Failures"),
+      ("A10", "SSRF"),
+    ] %}
+
+    <div class="owasp-grid">
+      {% for cat_id, cat_name in owasp_categories %}
+        {% set cat_count = owasp_counts.get(cat_id, 0) if owasp_counts is defined else 0 %}
+        {% set cat_tested = owasp_tested.get(cat_id, true) if owasp_tested is defined else true %}
+        <div class="owasp-cell {% if not cat_tested %}not-tested{% elif cat_count > 0 %}has-findings{% else %}no-findings{% endif %}">
+          <div class="owasp-id">{{ cat_id }}</div>
+          <div class="owasp-name">{{ cat_name }}</div>
+          <div class="owasp-count">
+            {% if not cat_tested %}—{% else %}{{ cat_count }}{% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div style="display:flex;gap:20px;font-size:8pt;color:var(--text-light);margin-bottom:24px;">
+      <span style="display:flex;align-items:center;gap:5px;">
+        <span style="width:12px;height:12px;background:#ffebee;border:1.5px solid var(--critical);border-radius:2px;display:inline-block;"></span> Findings identified
+      </span>
+      <span style="display:flex;align-items:center;gap:5px;">
+        <span style="width:12px;height:12px;background:#e8f5e9;border:1.5px solid #81c784;border-radius:2px;display:inline-block;"></span> No findings
+      </span>
+      <span style="display:flex;align-items:center;gap:5px;">
+        <span style="width:12px;height:12px;background:var(--silver);border:1.5px solid var(--border);border-radius:2px;display:inline-block;"></span> Not tested
+      </span>
+    </div>
+
+    <hr class="divider" />
+
+    <div class="section-label">Section 04</div>
+    <h1>Compliance Overview</h1>
+    <p>Pass/fail status across requested compliance frameworks based on findings.</p>
+
+    {% if compliance_results is defined and compliance_results %}
+    <div class="compliance-grid">
+      {% for framework in compliance_results %}
+      <div class="compliance-card no-break">
+        <div class="compliance-card-header">
+          <div class="compliance-framework">{{ framework.name }}</div>
+          <span class="badge {% if framework.pass_rate >= 80 %}badge-pass{% elif framework.pass_rate >= 60 %}badge-medium{% else %}badge-fail{% endif %}">
+            {% if framework.pass_rate >= 80 %}Passing{% elif framework.pass_rate >= 60 %}Partial{% else %}At Risk{% endif %}
+          </span>
+        </div>
+        <div class="compliance-score {% if framework.pass_rate >= 80 %}high-score{% elif framework.pass_rate >= 60 %}medium-score{% else %}low-score{% endif %}">
+          {{ framework.pass_rate }}%
+        </div>
+        <div style="font-size:8pt;text-align:center;color:var(--text-light);margin-bottom:6px;">
+          {{ framework.controls_passed }}/{{ framework.controls_total }} controls passing
+        </div>
+        <div class="compliance-progress">
+          <div class="compliance-progress-bar {% if framework.pass_rate < 80 %}{% if framework.pass_rate < 60 %}low{% else %}medium{% endif %}{% endif %}"
+               style="width:{{ framework.pass_rate }}%;"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="callout">Compliance mapping was not requested for this scan. Upgrade to Professional or Enterprise to enable compliance reporting against PCI-DSS, HIPAA, SOC 2, ISO 27001, NIST CSF, and GDPR.</div>
+    {% endif %}
+
+    <div class="page-footer">
+      <span>LegionCyber Shield &mdash; Confidential &mdash; {{ organization.name }}</span>
+      <span>Page 4</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================================
+     PAGE 5: REMEDIATION ROADMAP + ABOUT
+     =================================================================== -->
+<div class="page">
+  <div class="content-page">
+    <div class="page-header">
+      <div class="page-header-left"><strong>{{ organization.name }}</strong> &nbsp;|&nbsp; Executive Security Report</div>
+      <div class="page-header-right">{{ report.generated_at | strftime("%B %d, %Y") }} &nbsp;|&nbsp; Confidential</div>
+    </div>
+
+    <div class="section-label">Section 05</div>
+    <h1>Remediation Roadmap</h1>
+    <p>Prioritized action items ordered by business risk. Effort estimates assume standard engineering resources.</p>
+
+    <!-- Phase 1: Immediate (0–7 days) -->
+    <h3>Phase 1 &mdash; Immediate (0–7 Days)</h3>
+    {% set p1_items = remediation_roadmap | selectattr("priority", "==", 1) | list if remediation_roadmap is defined else [] %}
+    {% if p1_items %}
+      {% for item in p1_items %}
+      <div class="roadmap-item p1 no-break">
+        <div class="roadmap-priority">{{ loop.index }}</div>
+        <div class="roadmap-content">
+          <div class="roadmap-title">{{ item.title }}</div>
+          <div class="roadmap-desc">{{ item.description }}</div>
+          <div class="roadmap-effort">Estimated effort: {{ item.effort | default("2–8 hours") }} &nbsp;|&nbsp; Owner: {{ item.owner | default("Security Engineering") }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="callout">No immediate-priority items identified. All critical findings have been resolved or no critical findings were identified.</div>
+    {% endif %}
+
+    <!-- Phase 2: Short-term (7–30 days) -->
+    <h3>Phase 2 &mdash; Short-Term (7–30 Days)</h3>
+    {% set p2_items = remediation_roadmap | selectattr("priority", "==", 2) | list if remediation_roadmap is defined else [] %}
+    {% if p2_items %}
+      {% for item in p2_items[:4] %}
+      <div class="roadmap-item p2 no-break">
+        <div class="roadmap-priority">{{ loop.index }}</div>
+        <div class="roadmap-content">
+          <div class="roadmap-title">{{ item.title }}</div>
+          <div class="roadmap-desc">{{ item.description }}</div>
+          <div class="roadmap-effort">Estimated effort: {{ item.effort | default("4–16 hours") }} &nbsp;|&nbsp; Owner: {{ item.owner | default("Development Team") }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="callout">No short-term priority items identified.</div>
+    {% endif %}
+
+    <!-- Phase 3: Medium-term (30–90 days) -->
+    <h3>Phase 3 &mdash; Medium-Term (30–90 Days)</h3>
+    {% set p3_items = remediation_roadmap | selectattr("priority", "==", 3) | list if remediation_roadmap is defined else [] %}
+    {% if p3_items %}
+      {% for item in p3_items[:3] %}
+      <div class="roadmap-item p3 no-break">
+        <div class="roadmap-priority">{{ loop.index }}</div>
+        <div class="roadmap-content">
+          <div class="roadmap-title">{{ item.title }}</div>
+          <div class="roadmap-desc">{{ item.description }}</div>
+          <div class="roadmap-effort">Estimated effort: {{ item.effort | default("1–5 days") }} &nbsp;|&nbsp; Owner: {{ item.owner | default("Engineering") }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    <hr class="divider" />
+
+    <!-- About LegionCyber -->
+    <div class="about-section no-break">
+      <div class="section-label" style="color:rgba(255,255,255,0.5);">About</div>
+      <h2>LegionCyber Shield</h2>
+      <p>
+        LegionCyber Shield is an automated web application security scanning platform powered by
+        Nuclei, the industry-leading open-source vulnerability scanner. We help organizations of all
+        sizes continuously monitor their attack surface, meet compliance requirements, and remediate
+        vulnerabilities before attackers can exploit them.
+      </p>
+      <p>
+        Our platform runs thousands of security checks against OWASP Top 10, CVEs, misconfigurations,
+        and custom threat intelligence — delivering actionable, evidence-backed findings directly to
+        your security and engineering teams.
+      </p>
+      <div class="about-contact">
+        <div class="about-contact-item">
+          <label>Platform</label>
+          <span>shield.legioncyber.com</span>
+        </div>
+        <div class="about-contact-item">
+          <label>Support</label>
+          <span>shield@legioncyber.com</span>
+        </div>
+        <div class="about-contact-item">
+          <label>Website</label>
+          <span>legioncyber.com</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-footer">
+      <span>LegionCyber Shield &mdash; Confidential &mdash; {{ organization.name }}</span>
+      <span>Page 5</span>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

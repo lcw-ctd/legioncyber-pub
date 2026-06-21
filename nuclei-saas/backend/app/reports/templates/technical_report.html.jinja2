@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Technical Security Report — {{ organization.name }}</title>
+  <style>
+    :root {
+      --navy:        #0d1b2a;
+      --navy-mid:    #1b2d45;
+      --blue:        #1565c0;
+      --blue-light:  #1e88e5;
+      --steel:       #455a64;
+      --silver:      #eceff1;
+      --code-bg:     #1e1e2e;
+      --code-text:   #cdd6f4;
+      --white:       #ffffff;
+      --critical:    #b71c1c;
+      --high:        #e64a19;
+      --medium:      #f57c00;
+      --low:         #1976d2;
+      --info:        #546e7a;
+      --pass:        #2e7d32;
+      --fail:        #c62828;
+      --text:        #212121;
+      --text-light:  #546e7a;
+      --border:      #cfd8dc;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-size: 9.5pt;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--white);
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 0;
+      page-break-after: always;
+      position: relative;
+    }
+
+    @page { size: A4; margin: 18mm 16mm 22mm 16mm; }
+    @media print {
+      .page { width: 100%; page-break-after: always; }
+      .no-break { page-break-inside: avoid; }
+    }
+
+    /* Cover */
+    .cover {
+      background: var(--navy);
+      color: var(--white);
+      height: 297mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 48px 52px;
+    }
+
+    .cover-stripe {
+      position: absolute;
+      top: 0; right: 0;
+      width: 6px;
+      height: 100%;
+      background: linear-gradient(180deg, var(--blue-light), var(--blue));
+    }
+
+    .cover-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .cover-logo {
+      width: 44px; height: 44px;
+      background: var(--white);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 18px;
+      color: var(--navy);
+    }
+
+    .cover-logo-text  { font-size: 17px; font-weight: 700; }
+    .cover-logo-sub   { font-size: 10px; opacity: 0.6; letter-spacing: 1.5px; text-transform: uppercase; }
+
+    .cover-center { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 60px 0; }
+
+    .cover-report-type {
+      font-size: 9pt;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      opacity: 0.5;
+      margin-bottom: 10px;
+    }
+
+    .cover-title {
+      font-size: 32pt;
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 8px;
+    }
+
+    .cover-subtitle { font-size: 13pt; font-weight: 300; opacity: 0.7; margin-bottom: 36px; }
+
+    .cover-org {
+      font-size: 16pt;
+      font-weight: 600;
+      padding: 16px 20px;
+      background: rgba(255,255,255,0.07);
+      border-left: 4px solid var(--blue-light);
+      margin-bottom: 10px;
+    }
+
+    .cover-meta {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 40px;
+    }
+
+    .cover-meta-item label { display: block; font-size: 7.5pt; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.45; margin-bottom: 3px; }
+    .cover-meta-item span  { font-size: 10pt; font-weight: 500; }
+    .cover-footer          { opacity: 0.4; font-size: 7.5pt; }
+
+    /* Content pages */
+    .content-page { padding: 32px 44px 48px; }
+
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid var(--navy);
+      padding-bottom: 8px;
+      margin-bottom: 24px;
+    }
+
+    .page-header-left, .page-header-right { font-size: 7.5pt; color: var(--text-light); }
+    .page-header-right { text-align: right; }
+
+    .page-footer {
+      position: absolute;
+      bottom: 18px; left: 44px; right: 44px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 7pt;
+      color: var(--text-light);
+      border-top: 1px solid var(--border);
+      padding-top: 6px;
+    }
+
+    /* Typography */
+    h1 { font-size: 18pt; font-weight: 700; color: var(--navy); margin-bottom: 14px; }
+    h2 { font-size: 13pt; font-weight: 700; color: var(--navy); margin: 24px 0 10px; border-left: 4px solid var(--blue); padding-left: 10px; }
+    h3 { font-size: 10.5pt; font-weight: 600; color: var(--navy-mid); margin: 16px 0 6px; }
+    h4 { font-size: 9.5pt; font-weight: 600; color: var(--steel); margin: 12px 0 4px; }
+    p  { margin-bottom: 8px; }
+
+    .section-label {
+      font-size: 7.5pt;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--blue);
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    /* TOC */
+    .toc-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+      border-bottom: 1px dotted var(--border);
+      font-size: 9.5pt;
+    }
+
+    .toc-item.section { font-weight: 700; color: var(--navy); margin-top: 10px; }
+    .toc-item.sub     { padding-left: 20px; color: var(--steel); }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-size: 7.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge-critical { background: var(--critical); color: var(--white); }
+    .badge-high     { background: var(--high);     color: var(--white); }
+    .badge-medium   { background: var(--medium);   color: var(--white); }
+    .badge-low      { background: var(--low);       color: var(--white); }
+    .badge-info     { background: var(--info);      color: var(--white); }
+    .badge-pass     { background: var(--pass);      color: var(--white); }
+    .badge-fail     { background: var(--fail);      color: var(--white); }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 18px;
+      font-size: 8.5pt;
+    }
+
+    thead tr { background: var(--navy); color: var(--white); }
+    thead th { padding: 8px 10px; text-align: left; font-weight: 600; font-size: 8pt; }
+    tbody tr:nth-child(even) { background: var(--silver); }
+    tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .col-narrow { width: 90px; }
+    .col-medium { width: 120px; }
+
+    /* Finding card */
+    .finding-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 20px;
+      page-break-inside: avoid;
+      overflow: hidden;
+    }
+
+    .finding-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      gap: 12px;
+    }
+
+    .finding-card.critical .finding-card-header { background: #ffebee; border-bottom: 1px solid #ef9a9a; }
+    .finding-card.high     .finding-card-header { background: #fbe9e7; border-bottom: 1px solid #ffab91; }
+    .finding-card.medium   .finding-card-header { background: #fff3e0; border-bottom: 1px solid #ffcc80; }
+    .finding-card.low      .finding-card-header { background: #e3f2fd; border-bottom: 1px solid #90caf9; }
+    .finding-card.info     .finding-card-header { background: #eceff1; border-bottom: 1px solid var(--border); }
+
+    .finding-title { font-size: 10.5pt; font-weight: 700; color: var(--navy); flex: 1; }
+
+    .finding-body { padding: 14px 16px; }
+
+    .finding-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      background: var(--silver);
+      border-radius: 4px;
+    }
+
+    .meta-item label { display: block; font-size: 7pt; text-transform: uppercase; letter-spacing: 1px; color: var(--text-light); margin-bottom: 2px; }
+    .meta-item span  { font-size: 8.5pt; font-weight: 500; color: var(--navy); word-break: break-all; }
+
+    /* Code blocks */
+    .code-block {
+      background: var(--code-bg);
+      color: var(--code-text);
+      font-family: "Courier New", Courier, monospace;
+      font-size: 7.5pt;
+      padding: 12px 14px;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin: 8px 0;
+      white-space: pre-wrap;
+      word-break: break-all;
+      line-height: 1.6;
+    }
+
+    .code-label {
+      font-size: 7pt;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-light);
+      margin-bottom: 3px;
+      font-weight: 600;
+    }
+
+    /* Evidence section */
+    .evidence-section {
+      background: #f5f5f5;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 10px 14px;
+      margin: 10px 0;
+    }
+
+    .evidence-section h4 { color: var(--navy-mid); margin-top: 0; margin-bottom: 6px; }
+
+    /* Remediation steps */
+    .remediation-steps {
+      counter-reset: step-counter;
+      list-style: none;
+      margin: 8px 0;
+    }
+
+    .remediation-steps li {
+      counter-increment: step-counter;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin-bottom: 6px;
+      font-size: 9pt;
+    }
+
+    .remediation-steps li::before {
+      content: counter(step-counter);
+      background: var(--blue);
+      color: var(--white);
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 7.5pt;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    /* References */
+    .references-list {
+      list-style: none;
+      margin: 6px 0;
+    }
+
+    .references-list li {
+      font-size: 8pt;
+      color: var(--blue);
+      margin-bottom: 3px;
+      padding-left: 12px;
+      position: relative;
+    }
+
+    .references-list li::before {
+      content: "→";
+      position: absolute;
+      left: 0;
+      color: var(--steel);
+    }
+
+    /* Appendix */
+    .appendix-section {
+      background: var(--silver);
+      border-radius: 6px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+    }
+
+    .appendix-kv {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 4px 16px;
+      font-size: 8.5pt;
+    }
+
+    .appendix-kv dt { font-weight: 600; color: var(--navy-mid); padding: 3px 0; }
+    .appendix-kv dd { color: var(--text); padding: 3px 0; word-break: break-all; }
+
+    .callout {
+      background: #e3f2fd;
+      border-left: 4px solid var(--blue);
+      padding: 10px 14px;
+      border-radius: 0 4px 4px 0;
+      margin: 12px 0;
+      font-size: 9pt;
+    }
+
+    .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+    .text-right { text-align: right; }
+    .mt-2 { margin-top: 8px; }
+    .mt-4 { margin-top: 16px; }
+  </style>
+</head>
+<body>
+
+<!-- COVER PAGE -->
+<div class="page" style="position:relative;">
+  <div class="cover">
+    <div class="cover-stripe"></div>
+    <div class="cover-header">
+      <div class="cover-logo">LC</div>
+      <div>
+        <div class="cover-logo-text">LegionCyber Shield</div>
+        <div class="cover-logo-sub">Security Platform</div>
+      </div>
+    </div>
+
+    <div class="cover-center">
+      <div class="cover-report-type">Technical Security Report</div>
+      <div class="cover-title">Vulnerability<br>Assessment<br>Findings</div>
+      <div class="cover-subtitle">Full technical detail for security teams</div>
+      <div class="cover-org">{{ organization.name }}</div>
+      <div class="cover-meta">
+        <div class="cover-meta-item">
+          <label>Generated</label>
+          <span>{{ report.generated_at | strftime("%B %d, %Y %H:%M UTC") }}</span>
+        </div>
+        <div class="cover-meta-item">
+          <label>Scan ID</label>
+          <span>{{ scan.id | string | truncate(20, killwords=True, end="") }}</span>
+        </div>
+        <div class="cover-meta-item">
+          <label>Scan Plan</label>
+          <span>{{ scan.scan_plan_name }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="cover-footer">
+      Technical Report — Restricted Distribution — {{ organization.name }} — LegionCyber Shield
+    </div>
+  </div>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<div class="page">
+  <div class="content-page">
+    <div class="page-header">
+      <div class="page-header-left"><strong>{{ organization.name }}</strong> — Technical Security Report</div>
+      <div class="page-header-right">{{ report.generated_at | strftime("%B %d, %Y") }}</div>
+    </div>
+
+    <h1>Table of Contents</h1>
+
+    <div class="toc-item section"><span>1. Scan Summary</span><span>3</span></div>
+    <div class="toc-item sub"><span>1.1 Scan Configuration</span><span>3</span></div>
+    <div class="toc-item sub"><span>1.2 Findings Overview</span><span>3</span></div>
+    <div class="toc-item section"><span>2. Critical Findings</span><span>4</span></div>
+    <div class="toc-item section"><span>3. High Severity Findings</span><span>—</span></div>
+    <div class="toc-item section"><span>4. Medium Severity Findings</span><span>—</span></div>
+    <div class="toc-item section"><span>5. Low Severity Findings</span><span>—</span></div>
+    <div class="toc-item section"><span>6. Informational Findings</span><span>—</span></div>
+    <div class="toc-item section"><span>Appendix A: Scan Configuration</span><span>—</span></div>
+    <div class="toc-item section"><span>Appendix B: Template Versions</span><span>—</span></div>
+    <div class="toc-item section"><span>Appendix C: Methodology</span><span>—</span></div>
+
+    <hr class="divider" />
+    <h2>Scan Summary</h2>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="appendix-section">
+        <h3 style="margin-top:0;margin-bottom:8px;">Target Information</h3>
+        <dl class="appendix-kv">
+          <dt>Target URL</dt>     <dd>{{ scan.target_url }}</dd>
+          <dt>Scan Plan</dt>      <dd>{{ scan.scan_plan_name }}</dd>
+          <dt>Scan ID</dt>        <dd>{{ scan.id }}</dd>
+          <dt>Started</dt>        <dd>{{ scan.started_at | strftime("%Y-%m-%d %H:%M UTC") }}</dd>
+          <dt>Completed</dt>      <dd>{{ scan.completed_at | strftime("%Y-%m-%d %H:%M UTC") }}</dd>
+          <dt>Duration</dt>       <dd>{{ scan.duration_minutes | default("N/A") }} minutes</dd>
+        </dl>
+      </div>
+      <div class="appendix-section">
+        <h3 style="margin-top:0;margin-bottom:8px;">Results Overview</h3>
+        <dl class="appendix-kv">
+          <dt>Total Findings</dt>    <dd>{{ findings.total_count | default(0) }}</dd>
+          <dt>Critical</dt>          <dd style="color:var(--critical);font-weight:700;">{{ findings.critical_count | default(0) }}</dd>
+          <dt>High</dt>              <dd style="color:var(--high);font-weight:700;">{{ findings.high_count | default(0) }}</dd>
+          <dt>Medium</dt>            <dd style="color:var(--medium);font-weight:700;">{{ findings.medium_count | default(0) }}</dd>
+          <dt>Low</dt>               <dd style="color:var(--low);font-weight:700;">{{ findings.low_count | default(0) }}</dd>
+          <dt>Info</dt>              <dd>{{ findings.info_count | default(0) }}</dd>
+          <dt>Templates Run</dt>     <dd>{{ scan.total_templates | default("N/A") }}</dd>
+          <dt>Requests Made</dt>     <dd>{{ scan.total_requests | default("N/A") }}</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="page-footer">
+      <span>LegionCyber Shield — Technical Report — {{ organization.name }}</span>
+      <span>Page 2</span>
+    </div>
+  </div>
+</div>
+
+<!-- FINDINGS PAGES (one per severity group) -->
+{% for severity in ["critical", "high", "medium", "low", "info"] %}
+  {% set sev_findings = findings.items | selectattr("severity", "==", severity) | list %}
+  {% if sev_findings %}
+<div class="page">
+  <div class="content-page">
+    <div class="page-header">
+      <div class="page-header-left"><strong>{{ organization.name }}</strong> — Technical Security Report</div>
+      <div class="page-header-right">{{ report.generated_at | strftime("%B %d, %Y") }}</div>
+    </div>
+
+    <div class="section-label">{{ severity | title }} Severity</div>
+    <h1>
+      <span class="badge badge-{{ severity }}">{{ severity | title }}</span>
+      Findings ({{ sev_findings | length }})
+    </h1>
+
+    {% for finding in sev_findings %}
+    <div class="finding-card {{ finding.severity }} no-break">
+      <div class="finding-card-header">
+        <div class="finding-title">{{ finding.name }}</div>
+        <span class="badge badge-{{ finding.severity }}">{{ finding.severity | title }}</span>
+      </div>
+
+      <div class="finding-body">
+        <!-- Metadata grid -->
+        <div class="finding-meta-grid">
+          <div class="meta-item">
+            <label>CVSS Score</label>
+            <span>{{ finding.cvss_score | default("N/A") }}</span>
+          </div>
+          <div class="meta-item">
+            <label>CWE</label>
+            <span>{% if finding.cwe_id %}CWE-{{ finding.cwe_id }}{% else %}N/A{% endif %}</span>
+          </div>
+          <div class="meta-item">
+            <label>CVE</label>
+            <span>{{ finding.cve_id | default("N/A") }}</span>
+          </div>
+          <div class="meta-item">
+            <label>Template</label>
+            <span>{{ finding.template_id | default("N/A") | truncate(28, killwords=True) }}</span>
+          </div>
+          <div class="meta-item" style="grid-column: span 2;">
+            <label>Matched At</label>
+            <span>{{ finding.matched_at | default("N/A") }}</span>
+          </div>
+          <div class="meta-item">
+            <label>OWASP Category</label>
+            <span>{{ finding.owasp_category | default("N/A") }}</span>
+          </div>
+          <div class="meta-item">
+            <label>Confidence</label>
+            <span>{{ finding.confidence | default("medium") | title }}</span>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <h4>Description</h4>
+        <p>{{ finding.description | default("No description provided.") }}</p>
+
+        <!-- Request Evidence -->
+        {% if finding.request %}
+        <div class="evidence-section">
+          <h4>HTTP Request</h4>
+          <div class="code-block">{{ finding.request }}</div>
+        </div>
+        {% endif %}
+
+        <!-- Response Evidence -->
+        {% if finding.response %}
+        <div class="evidence-section">
+          <h4>HTTP Response (excerpt)</h4>
+          <div class="code-block">{{ finding.response | truncate(800) }}</div>
+        </div>
+        {% endif %}
+
+        <!-- Extracted Data -->
+        {% if finding.extracted_results %}
+        <div class="evidence-section">
+          <h4>Extracted Data / Matched Pattern</h4>
+          <div class="code-block">{{ finding.extracted_results | join("\n") }}</div>
+        </div>
+        {% endif %}
+
+        <!-- Remediation -->
+        <h4>Remediation Steps</h4>
+        {% if finding.remediation_steps %}
+        <ol class="remediation-steps">
+          {% for step in finding.remediation_steps %}
+          <li>{{ step }}</li>
+          {% endfor %}
+        </ol>
+        {% elif finding.remediation %}
+        <p>{{ finding.remediation }}</p>
+        {% else %}
+        <p style="color:var(--text-light);">Refer to the OWASP remediation guide for {{ finding.owasp_category | default("this vulnerability class") }}.</p>
+        {% endif %}
+
+        <!-- Code examples -->
+        {% if finding.code_examples %}
+          <h4>Code Examples</h4>
+          {% for lang, example in finding.code_examples.items() %}
+          <div class="code-label">{{ lang | title }}</div>
+          <div class="code-block">{{ example }}</div>
+          {% endfor %}
+        {% endif %}
+
+        <!-- References -->
+        {% if finding.references %}
+        <h4>References</h4>
+        <ul class="references-list">
+          {% for ref in finding.references %}
+          <li>{{ ref }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="page-footer">
+      <span>LegionCyber Shield — Technical Report — {{ organization.name }}</span>
+      <span>{{ severity | title }} Findings</span>
+    </div>
+  </div>
+</div>
+  {% endif %}
+{% endfor %}
+
+<!-- APPENDIX A: Scan Configuration -->
+<div class="page">
+  <div class="content-page">
+    <div class="page-header">
+      <div class="page-header-left"><strong>{{ organization.name }}</strong> — Technical Security Report</div>
+      <div class="page-header-right">{{ report.generated_at | strftime("%B %d, %Y") }}</div>
+    </div>
+
+    <div class="section-label">Appendix A</div>
+    <h1>Scan Configuration</h1>
+
+    <div class="appendix-section">
+      <dl class="appendix-kv">
+        <dt>Scan Plan ID</dt>          <dd>{{ scan.scan_plan_id | default("N/A") }}</dd>
+        <dt>Scan Plan Name</dt>        <dd>{{ scan.scan_plan_name | default("N/A") }}</dd>
+        <dt>Target URL</dt>            <dd>{{ scan.target_url }}</dd>
+        <dt>Nuclei Version</dt>        <dd>{{ scan.nuclei_version | default("N/A") }}</dd>
+        <dt>Template Tags Used</dt>    <dd>{{ scan.template_tags | join(", ") if scan.template_tags else "N/A" }}</dd>
+        <dt>Excluded Tags</dt>         <dd>{{ scan.exclude_tags | join(", ") if scan.exclude_tags else "None" }}</dd>
+        <dt>Severity Filters</dt>      <dd>{{ scan.severity_filter | join(", ") if scan.severity_filter else "All" }}</dd>
+        <dt>Rate Limit (req/s)</dt>    <dd>{{ scan.rate_limit | default("150") }}</dd>
+        <dt>Concurrency</dt>           <dd>{{ scan.concurrency | default("25") }}</dd>
+        <dt>Timeout (s)</dt>           <dd>{{ scan.timeout | default("10") }}</dd>
+        <dt>Custom Templates</dt>      <dd>{{ "Yes" if scan.custom_templates else "No" }}</dd>
+        <dt>Authenticated Scan</dt>    <dd>{{ "Yes" if scan.authenticated else "No" }}</dd>
+        <dt>Total Requests</dt>        <dd>{{ scan.total_requests | default("N/A") }}</dd>
+        <dt>Templates Run</dt>         <dd>{{ scan.total_templates | default("N/A") }}</dd>
+      </dl>
+    </div>
+
+    <div class="section-label mt-4">Appendix B</div>
+    <h2>Template Versions</h2>
+
+    <div class="appendix-section">
+      <dl class="appendix-kv">
+        <dt>Nuclei Templates Version</dt> <dd>{{ scan.templates_version | default("N/A") }}</dd>
+        <dt>Templates Updated At</dt>     <dd>{{ scan.templates_updated_at | default("N/A") }}</dd>
+        <dt>Custom Templates Count</dt>   <dd>{{ scan.custom_templates_count | default(0) }}</dd>
+        <dt>LegionCyber Platform</dt>     <dd>{{ report.platform_version | default("1.0.0") }}</dd>
+      </dl>
+    </div>
+
+    <div class="section-label mt-4">Appendix C</div>
+    <h2>Methodology</h2>
+
+    <p>
+      LegionCyber Shield uses <strong>Nuclei</strong> — an open-source, community-powered vulnerability scanner
+      maintained by ProjectDiscovery — to perform automated security assessments. Nuclei uses YAML-based templates
+      to define detection logic for thousands of known vulnerability classes, misconfigurations, exposed panels,
+      and CVEs.
+    </p>
+
+    <h3>Testing Approach</h3>
+    <p>
+      Scans are performed as a black-box assessment from an external attacker's perspective unless authenticated
+      scanning is enabled. Templates are selected based on the chosen scan plan and filtered by severity threshold.
+      Intrusive templates (denial-of-service, destructive tests) are excluded by default.
+    </p>
+
+    <h3>Severity Classification</h3>
+    <table>
+      <thead>
+        <tr><th>Severity</th><th>CVSS Range</th><th>Description</th><th>SLA</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-critical">Critical</span></td>
+          <td>9.0 – 10.0</td>
+          <td>Remote code execution, complete system compromise, authentication bypass with critical data exposure.</td>
+          <td>Immediate (24h)</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-high">High</span></td>
+          <td>7.0 – 8.9</td>
+          <td>Significant data exposure, privilege escalation, sensitive information disclosure.</td>
+          <td>7 days</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-medium">Medium</span></td>
+          <td>4.0 – 6.9</td>
+          <td>Limited impact vulnerabilities, misconfigurations requiring specific conditions to exploit.</td>
+          <td>30 days</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-low">Low</span></td>
+          <td>0.1 – 3.9</td>
+          <td>Defense-in-depth issues, informational leakage, minor configuration weaknesses.</td>
+          <td>90 days</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-info">Info</span></td>
+          <td>N/A</td>
+          <td>Informational findings such as technology fingerprinting and version detection.</td>
+          <td>Next review cycle</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Limitations</h3>
+    <p>
+      This assessment is automated and may not identify all vulnerabilities present in the application.
+      Logic flaws, business logic vulnerabilities, and issues requiring deep application context may
+      not be detected. Manual penetration testing is recommended for comprehensive coverage.
+      Results are accurate as of the scan date; the security posture may change as the application evolves.
+    </p>
+
+    <div class="page-footer">
+      <span>LegionCyber Shield — Technical Report — {{ organization.name }}</span>
+      <span>Appendices</span>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

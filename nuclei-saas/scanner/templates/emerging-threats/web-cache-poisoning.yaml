@@ -1,0 +1,203 @@
+id: web-cache-poisoning
+
+info:
+  name: Web Cache Poisoning
+  author: legioncyber
+  severity: high
+  description: |
+    Tests for web cache poisoning vulnerabilities including X-Forwarded-Host injection,
+    X-Forwarded-For manipulation, Cache-Control bypass attempts, and unkeyed header injection
+    that could allow attackers to serve malicious responses to other users.
+  tags: cache,web-cache-poisoning,headers,ssrf
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:L/I:H/A:N
+    cvss-score: 8.7
+    cwe-id: CWE-444
+    owasp-id: A05-2021
+
+requests:
+  # -----------------------------------------------------------------------
+  # X-Forwarded-Host injection — injected host reflected in response
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/index.html"
+      - "{{BaseURL}}/login"
+    headers:
+      X-Forwarded-Host: "evil.legioncyber-probe.com"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "evil.legioncyber-probe.com"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # X-Forwarded-Host reflected in HTML <base> or script src
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    headers:
+      X-Forwarded-Host: "evil.legioncyber-probe.com"
+      X-Forwarded-Proto: "https"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        regex:
+          - "(src|href|action)=[\"']https?://evil\\.legioncyber-probe\\.com"
+          - "<base[^>]+href=[\"']https?://evil\\.legioncyber-probe\\.com"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # X-Host header injection
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/api/"
+    headers:
+      X-Host: "evil.legioncyber-probe.com"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "evil.legioncyber-probe.com"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # X-Original-URL / X-Rewrite-URL header injection (cache key override)
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    headers:
+      X-Original-URL: "/admin"
+      X-Rewrite-URL: "/admin"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "admin"
+          - "dashboard"
+          - "management"
+          - "panel"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # Unkeyed query parameter accepted and reflected
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/?utm_source=<script>alert(1)</script>"
+      - "{{BaseURL}}/?ref=<script>alert(1)</script>"
+      - "{{BaseURL}}/?callback=<script>alert(1)</script>"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "<script>alert(1)</script>"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Cache poisoning via fat GET (body in GET request)
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+    body: "probe_param=evil.legioncyber-probe.com"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "evil.legioncyber-probe.com"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Cache-Control and Pragma bypass
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user/profile"
+      - "{{BaseURL}}/api/me"
+    headers:
+      Cache-Control: "no-cache"
+      Pragma: "no-cache"
+      X-Cache-Bypass: "1"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "X-Cache: HIT"
+          - "CF-Cache-Status: HIT"
+          - "Age:"
+        condition: or
+        part: header
+
+  # -----------------------------------------------------------------------
+  # HTTP Response Splitting / CRLF injection via header values
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/redirect?url=https://example.com%0d%0aX-Injected-Header: evil"
+      - "{{BaseURL}}/login?return=%0d%0aSet-Cookie: admin=true"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "X-Injected-Header: evil"
+          - "Set-Cookie: admin=true"
+        part: header
+
+  # -----------------------------------------------------------------------
+  # Vary header missing on user-specific responses (cache misconfiguration)
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/profile"
+      - "{{BaseURL}}/api/me"
+      - "{{BaseURL}}/dashboard"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "Authorization"
+          - "Cookie"
+        negative: true
+        part: header
+        name: "vary_header_missing"
+      - type: word
+        words:
+          - "Cache-Control: public"
+          - "s-maxage="
+        condition: or
+        part: header

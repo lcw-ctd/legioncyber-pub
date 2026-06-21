@@ -1,0 +1,218 @@
+id: a05-security-misconfiguration
+
+info:
+  name: A05:2021 - Security Misconfiguration
+  author: legioncyber
+  severity: medium
+  description: |
+    Tests for security misconfigurations including default credentials, exposed admin panels,
+    directory listing, verbose error messages, dangerous HTTP methods, and missing security
+    headers. Maps to OWASP Top 10 2021 A05.
+  tags: owasp,a05,misconfig,panel,exposure,headers,directory-listing
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-16
+    owasp-id: A05-2021
+
+requests:
+  # -----------------------------------------------------------------------
+  # Exposed admin panels (no auth required)
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/admin/"
+      - "{{BaseURL}}/wp-admin/"
+      - "{{BaseURL}}/phpmyadmin/"
+      - "{{BaseURL}}/phpmyadmin/index.php"
+      - "{{BaseURL}}/pma/"
+      - "{{BaseURL}}/dbadmin/"
+      - "{{BaseURL}}/adminer/"
+      - "{{BaseURL}}/adminer.php"
+      - "{{BaseURL}}/django/admin/"
+      - "{{BaseURL}}/cpanel"
+      - "{{BaseURL}}/plesk"
+      - "{{BaseURL}}/webmin/"
+      - "{{BaseURL}}/manager/html"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "admin"
+          - "dashboard"
+          - "panel"
+          - "phpMyAdmin"
+          - "Adminer"
+          - "Django administration"
+          - "Tomcat Manager"
+          - "Plesk"
+          - "cPanel"
+          - "Webmin"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # Directory listing enabled
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/uploads/"
+      - "{{BaseURL}}/files/"
+      - "{{BaseURL}}/backup/"
+      - "{{BaseURL}}/backups/"
+      - "{{BaseURL}}/logs/"
+      - "{{BaseURL}}/static/"
+      - "{{BaseURL}}/assets/"
+      - "{{BaseURL}}/data/"
+      - "{{BaseURL}}/temp/"
+      - "{{BaseURL}}/tmp/"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "Index of /"
+          - "Directory listing for"
+          - "Parent Directory"
+          - "[DIR]"
+          - "Apache/2"
+          - "nginx/"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Missing security headers
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "X-Frame-Options"
+        negative: true
+        part: header
+      - type: word
+        words:
+          - "X-Content-Type-Options"
+        negative: true
+        part: header
+      - type: word
+        words:
+          - "Content-Security-Policy"
+        negative: true
+        part: header
+
+  # -----------------------------------------------------------------------
+  # Verbose error messages — stack traces / framework disclosure
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/notfound_endpoint_xyz"
+      - "{{BaseURL}}/api/v1/notfound_endpoint_xyz"
+      - "{{BaseURL}}/trigger-error"
+      - "{{BaseURL}}/?debug=1"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        regex:
+          - "(?i)Traceback \\(most recent call last\\)"
+          - "(?i)at [\\w\\.]+\\(.*\\.java:\\d+\\)"
+          - "(?i)\\bStack trace\\b"
+          - "(?i)Fatal error:.*in .* on line"
+          - "(?i)\\bException\\b.*\\bStackTrace\\b"
+          - "(?i)unhandled exception.*ASP\\.NET"
+          - "(?i)org\\.springframework\\."
+          - "(?i)Rails\\.application\\.config"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Dangerous HTTP methods (TRACE, CONNECT)
+  # -----------------------------------------------------------------------
+  - method: TRACE
+    path:
+      - "{{BaseURL}}/"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "TRACE / HTTP"
+          - "Via:"
+        condition: or
+        part: body
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        regex:
+          - "(?i)Allow:.*TRACE"
+          - "(?i)Allow:.*DELETE"
+          - "(?i)Allow:.*PUT"
+        part: header
+
+  # -----------------------------------------------------------------------
+  # Default credentials for common panels
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/wp-login.php"
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+    body: "log=admin&pwd=admin&wp-submit=Log+In"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+      - type: word
+        words:
+          - "wp-admin"
+          - "Dashboard"
+          - "Howdy"
+          - "Profile"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # Cloud/IDE files accidentally exposed
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/.env"
+      - "{{BaseURL}}/.env.local"
+      - "{{BaseURL}}/.env.production"
+      - "{{BaseURL}}/.env.backup"
+      - "{{BaseURL}}/config.php.bak"
+      - "{{BaseURL}}/web.config.bak"
+      - "{{BaseURL}}/database.yml"
+      - "{{BaseURL}}/application.yml"
+      - "{{BaseURL}}/settings.py.bak"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        regex:
+          - "(?i)DB_PASSWORD\\s*="
+          - "(?i)SECRET_KEY\\s*="
+          - "(?i)AWS_SECRET_ACCESS_KEY\\s*="
+          - "(?i)DATABASE_URL\\s*="
+          - "(?i)REDIS_URL\\s*="
+        part: body

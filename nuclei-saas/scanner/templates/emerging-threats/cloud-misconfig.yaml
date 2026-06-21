@@ -1,0 +1,197 @@
+id: cloud-misconfig
+
+info:
+  name: Cloud Misconfiguration Detection
+  author: legioncyber
+  severity: critical
+  description: |
+    Tests for cloud misconfiguration issues including AWS IMDS exposure, GCP metadata access,
+    Azure IMDS, exposed S3 bucket references, and cloud credentials leaked in HTML/JavaScript.
+  tags: cloud,aws,gcp,azure,s3,exposure,misconfig
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H
+    cvss-score: 10.0
+    cwe-id: CWE-306
+    owasp-id: A05-2021
+
+requests:
+  # -----------------------------------------------------------------------
+  # AWS IMDSv1 metadata service (direct — only works from EC2 or via SSRF)
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/latest/meta-data/"
+      - "{{BaseURL}}/latest/meta-data/iam/security-credentials/"
+      - "{{BaseURL}}/latest/user-data"
+      - "{{BaseURL}}/latest/dynamic/instance-identity/document"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "ami-id"
+          - "instance-id"
+          - "instance-type"
+          - "AccessKeyId"
+          - "SecretAccessKey"
+          - "Token"
+          - "Expiration"
+          - "accountId"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Exposed S3 bucket URLs in page source
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/index.html"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        regex:
+          - "https?://[a-z0-9.-]+\\.s3\\.amazonaws\\.com"
+          - "https?://s3[.-][a-z0-9-]+\\.amazonaws\\.com/[a-z0-9-]+"
+          - "https?://[a-z0-9.-]+\\.s3-[a-z0-9-]+\\.amazonaws\\.com"
+        part: body
+    extractors:
+      - type: regex
+        name: s3_bucket_url
+        regex:
+          - "https?://[a-z0-9.-]+\\.s3[.-][a-z0-9-]*\\.amazonaws\\.com[/a-zA-Z0-9._-]*"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Publicly readable S3 bucket (direct access)
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/?list-type=2&max-keys=10"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "ListBucketResult"
+          - "Contents"
+          - "Key"
+          - "ETag"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # AWS credentials exposed in app source / config files
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/.aws/credentials"
+      - "{{BaseURL}}/aws.config"
+      - "{{BaseURL}}/config/aws.json"
+      - "{{BaseURL}}/app/config/aws.php"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        regex:
+          - "(?i)aws_access_key_id\\s*=\\s*[A-Z0-9]{16,}"
+          - "(?i)aws_secret_access_key\\s*=\\s*[a-zA-Z0-9/+]{30,}"
+          - "(?i)AKIA[0-9A-Z]{16}"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Hardcoded cloud credentials in JavaScript bundles
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/static/js/main.js"
+      - "{{BaseURL}}/static/js/bundle.js"
+      - "{{BaseURL}}/assets/js/app.js"
+      - "{{BaseURL}}/js/config.js"
+      - "{{BaseURL}}/app.js"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        regex:
+          - "AKIA[0-9A-Z]{16}"
+          - "(?i)aws[_-]?secret[_-]?access[_-]?key\\s*[=:]\\s*[\"'][a-zA-Z0-9/+]{30,}"
+          - "(?i)azure[_-]?storage[_-]?account[_-]?key\\s*[=:]\\s*[\"'][a-zA-Z0-9+/=]{40,}"
+          - "(?i)gcp[_-]?service[_-]?account"
+          - "\"private_key\"\\s*:\\s*\"-----BEGIN"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # GCP metadata endpoint (direct or via SSRF)
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/computeMetadata/v1/"
+      - "{{BaseURL}}/computeMetadata/v1/instance/"
+      - "{{BaseURL}}/computeMetadata/v1/project/"
+    headers:
+      Metadata-Flavor: Google
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "project-id"
+          - "service-accounts"
+          - "zone"
+          - "hostname"
+          - "instance-id"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Azure IMDS exposure
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/metadata/instance"
+    headers:
+      Metadata: "true"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "subscriptionId"
+          - "resourceGroupName"
+          - "vmId"
+          - "location"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Firebase / Firestore database exposure
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/.json"
+      - "{{BaseURL}}/users.json"
+      - "{{BaseURL}}/data.json"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "email"
+          - "uid"
+          - "displayName"
+          - "password"
+          - "token"
+        condition: or
+        part: body

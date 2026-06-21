@@ -1,0 +1,257 @@
+id: framework-fingerprint
+
+info:
+  name: Framework Detection and Misconfiguration
+  author: legioncyber
+  severity: medium
+  description: |
+    Detects and tests common web framework misconfigurations including WordPress/Drupal/Joomla
+    misconfigs, Laravel/Django/Spring Boot debug modes, exposed actuator endpoints, Express.js
+    error disclosure, and Next.js build ID exposure.
+  tags: tech,misconfig,wordpress,drupal,laravel,django,spring,nextjs,framework
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-16
+    owasp-id: A05-2021
+
+requests:
+  # -----------------------------------------------------------------------
+  # WordPress — xmlrpc.php enabled (amplification / brute-force vector)
+  # -----------------------------------------------------------------------
+  - method: POST
+    path:
+      - "{{BaseURL}}/xmlrpc.php"
+    headers:
+      Content-Type: text/xml
+    body: |
+      <?xml version="1.0" encoding="UTF-8"?>
+      <methodCall><methodName>system.listMethods</methodName><params></params></methodCall>
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "methodResponse"
+          - "array"
+          - "wp.getUsersBlogs"
+          - "wp.getPosts"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # WordPress — readme.html version disclosure
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/readme.html"
+      - "{{BaseURL}}/license.txt"
+      - "{{BaseURL}}/wp-includes/version.php"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "WordPress"
+          - "semantic"
+          - "Version"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # WordPress — user enumeration via author feed
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/?author=1"
+      - "{{BaseURL}}/?author=2"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+      - type: regex
+        regex:
+          - "/author/[a-zA-Z0-9_-]+"
+        part: header
+
+  # -----------------------------------------------------------------------
+  # Drupal — REST API user listing without auth
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/user/login?_format=json"
+      - "{{BaseURL}}/jsonapi/user/user"
+      - "{{BaseURL}}/jsonapi/node/article"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "jsonapi"
+          - "data"
+          - "type"
+          - "attributes"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Laravel — debug mode (APP_DEBUG=true)
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/debug"
+      - "{{BaseURL}}/api/nonexistent-route-xyz"
+      - "{{BaseURL}}/nonexistent-page-xyz"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 500
+          - 404
+      - type: word
+        words:
+          - "Whoops"
+          - "Illuminate"
+          - "Laravel"
+          - "app/Http/Controllers"
+          - "vendor/laravel"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Django — DEBUG=True leaks settings and installed apps
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/nonexistent-xyz/"
+      - "{{BaseURL}}/nonexistent-page-xyz/"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 404
+      - type: word
+        words:
+          - "Django tried these URL patterns"
+          - "DEBUG = True"
+          - "INSTALLED_APPS"
+          - "Using the URLconf defined in"
+          - "You're seeing this error because"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Spring Boot Actuator — sensitive endpoints exposed
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/actuator"
+      - "{{BaseURL}}/actuator/env"
+      - "{{BaseURL}}/actuator/beans"
+      - "{{BaseURL}}/actuator/mappings"
+      - "{{BaseURL}}/actuator/httptrace"
+      - "{{BaseURL}}/actuator/loggers"
+      - "{{BaseURL}}/actuator/heapdump"
+      - "{{BaseURL}}/actuator/threaddump"
+      - "{{BaseURL}}/actuator/metrics"
+      - "{{BaseURL}}/actuator/info"
+      - "{{BaseURL}}/actuator/configprops"
+      - "{{BaseURL}}/actuator/shutdown"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "_links"
+          - "activeProfiles"
+          - "spring"
+          - "beans"
+          - "jvm"
+          - "memory"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Express.js — default error disclosure with stack trace
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/error-xyz"
+      - "{{BaseURL}}/error"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 500
+      - type: word
+        words:
+          - "express"
+          - "node_modules"
+          - "at Object.<anonymous>"
+          - "at Module._compile"
+          - "Error: Cannot"
+        condition: or
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Next.js — build ID and internal route exposure
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/_next/static/chunks/main.js"
+      - "{{BaseURL}}/_next/static/development/_buildManifest.js"
+      - "{{BaseURL}}/_next/static/development/_ssgManifest.js"
+      - "{{BaseURL}}/_next/data/build-id/index.json"
+      - "{{BaseURL}}/api/nextjs-info"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "buildId"
+          - "__NEXT_DATA__"
+          - "_next"
+          - "selfUrl"
+        condition: or
+        part: body
+    extractors:
+      - type: regex
+        name: nextjs_build_id
+        regex:
+          - "\"buildId\":\"([a-zA-Z0-9_-]+)\""
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Ruby on Rails — secret_key_base exposure in error pages
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/rails/info/properties"
+      - "{{BaseURL}}/rails/mailers"
+      - "{{BaseURL}}/rails/info/routes"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "Rails version"
+          - "Ruby version"
+          - "secret_key_base"
+          - "Application routes"
+        condition: or
+        part: body
