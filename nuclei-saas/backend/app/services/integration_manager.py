@@ -1,7 +1,7 @@
 """Integration manager: provider-specific sync logic for all third-party integrations."""
 import json
 import logging
-from typing import Any
+from typing import Any, Optional
 
 import httpx
 
@@ -394,6 +394,3 @@ class IntegrationManager:
 
     async def _noop_sync(self, integration: Any, config: dict) -> dict:
         return {"provider": integration.provider, "status": "no_sync_action"}
-
-
-from typing import Optional

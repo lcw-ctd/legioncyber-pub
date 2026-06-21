@@ -1,0 +1,594 @@
+{
+  "pci_dss": {
+    "version": "4.0",
+    "name": "PCI-DSS",
+    "description": "Payment Card Industry Data Security Standard — requirements for organizations handling cardholder data",
+    "requirements": [
+      {
+        "id": "6.2",
+        "name": "Bespoke and custom software are developed securely",
+        "sub_requirements": ["6.2.4"],
+        "description": "All bespoke and custom software is protected from common software attacks and related vulnerabilities including injection attacks, buffer overflow, insecure cryptography, improper error handling, and cross-site scripting.",
+        "owasp_categories": ["A03", "A05", "A06"],
+        "cwe_ids": [89, 79, 78, 94, 116, 134],
+        "nuclei_tags": ["sqli", "xss", "injection", "misconfig", "ssti"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "6.3",
+        "name": "Security vulnerabilities are identified and addressed",
+        "sub_requirements": ["6.3.1", "6.3.2", "6.3.3"],
+        "description": "Security vulnerabilities in system components are identified and ranked according to risk, addressed in a timely manner with patches. An inventory of bespoke software and third-party components is maintained.",
+        "owasp_categories": ["A06"],
+        "cwe_ids": [],
+        "nuclei_tags": ["cve", "vuln", "outdated"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "6.4",
+        "name": "Public-facing web applications are protected against attacks",
+        "sub_requirements": ["6.4.1", "6.4.2"],
+        "description": "All public-facing web applications are protected against known attacks, either by reviewing the application, installing a Web Application Firewall, or both. Reviews shall address all OWASP Top 10 vulnerabilities.",
+        "owasp_categories": ["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10"],
+        "cwe_ids": [79, 89, 22, 78, 352, 601, 287, 311],
+        "nuclei_tags": ["owasp", "waf", "sqli", "xss", "ssrf", "csrf", "injection"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "8.2",
+        "name": "User identification and related accounts are managed securely",
+        "sub_requirements": ["8.2.1", "8.2.2", "8.2.3", "8.2.4", "8.2.5", "8.2.6", "8.2.7"],
+        "description": "All users are assigned unique ID before allowing access to system components. Management of IDs, credentials, and accounts for users and administrators follows documented policy.",
+        "owasp_categories": ["A07"],
+        "cwe_ids": [284, 287, 307, 521, 620],
+        "nuclei_tags": ["auth", "default-login", "default-credentials", "weak-credentials"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "8.3",
+        "name": "User authentication for users and administrators is established and managed",
+        "sub_requirements": ["8.3.1", "8.3.2", "8.3.6"],
+        "description": "All user passwords and passphrases are set to meet minimum length and complexity. MFA is implemented for all non-console access into the cardholder data environment.",
+        "owasp_categories": ["A07"],
+        "cwe_ids": [256, 257, 259, 521, 620, 640],
+        "nuclei_tags": ["auth", "login", "mfa", "password"],
+        "severity_threshold": "high"
+      },
+      {
+        "id": "4.2",
+        "name": "PAN is protected with strong cryptography during transmission",
+        "sub_requirements": ["4.2.1"],
+        "description": "Strong cryptography is used to safeguard PAN during transmission over open, public networks. Trusted keys/certificates are used for authentication. TLS 1.2 minimum is required.",
+        "owasp_categories": ["A02"],
+        "cwe_ids": [295, 297, 310, 311, 319, 326, 327],
+        "nuclei_tags": ["ssl", "tls", "crypto", "weak-tls", "certificate"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "2.2",
+        "name": "System components are configured and managed securely",
+        "sub_requirements": ["2.2.1", "2.2.4", "2.2.7"],
+        "description": "Configuration standards address changing of default passwords, removing unnecessary functionality, and enabling only necessary services. All non-console administrative access is encrypted.",
+        "owasp_categories": ["A05"],
+        "cwe_ids": [16, 255, 259, 260],
+        "nuclei_tags": ["default-login", "misconfig", "exposure", "panel"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "10.2",
+        "name": "Audit logs capture all individual user access to cardholder data",
+        "sub_requirements": ["10.2.1", "10.2.2"],
+        "description": "Audit logs capture all individual access, all actions by root or admin users, all access to audit trails, invalid logical access attempts, and changes to identification and authentication mechanisms.",
+        "owasp_categories": ["A09"],
+        "cwe_ids": [223, 532, 778],
+        "nuclei_tags": ["log", "disclosure", "debug"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "11.3",
+        "name": "External and internal vulnerabilities are regularly identified, prioritized, and addressed",
+        "sub_requirements": ["11.3.1", "11.3.2"],
+        "description": "External vulnerability scans are performed by an Approved Scanning Vendor (ASV) at least every three months and after any significant change. All high-risk and critical vulnerabilities must be resolved.",
+        "owasp_categories": ["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10"],
+        "cwe_ids": [],
+        "nuclei_tags": ["cve", "vuln", "owasp"],
+        "severity_threshold": "low"
+      },
+      {
+        "id": "12.3",
+        "name": "Risks to the cardholder data environment are formally identified, evaluated, and managed",
+        "sub_requirements": ["12.3.2"],
+        "description": "A targeted risk analysis is performed for any PCI DSS requirement that the entity meets via a customized approach, conducted at least once every 12 months.",
+        "owasp_categories": ["A01", "A05", "A06"],
+        "cwe_ids": [],
+        "nuclei_tags": ["exposure", "misconfig", "panel"],
+        "severity_threshold": "low"
+      }
+    ]
+  },
+  "hipaa": {
+    "version": "2013",
+    "name": "HIPAA",
+    "description": "Health Insurance Portability and Accountability Act — Security Rule requirements for protecting electronic Protected Health Information (ePHI)",
+    "requirements": [
+      {
+        "id": "164.312(a)(2)(i)",
+        "name": "Unique User Identification",
+        "description": "Assign a unique name and/or number for identifying and tracking user identity to ensure accountability for actions on ePHI systems.",
+        "owasp_categories": ["A07"],
+        "cwe_ids": [284, 287],
+        "nuclei_tags": ["auth", "default-login", "shared-credentials"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "164.312(a)(2)(iii)",
+        "name": "Automatic Logoff",
+        "description": "Implement electronic procedures that terminate an electronic session after a predetermined time of inactivity to prevent unauthorized access to ePHI.",
+        "owasp_categories": ["A07"],
+        "cwe_ids": [613],
+        "nuclei_tags": ["auth", "session", "logout"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "164.312(a)(2)(iv)",
+        "name": "Encryption and Decryption",
+        "description": "Implement a mechanism to encrypt and decrypt ePHI to protect against unauthorized access during storage and transmission.",
+        "owasp_categories": ["A02"],
+        "cwe_ids": [311, 319, 326, 327],
+        "nuclei_tags": ["crypto", "ssl", "tls", "weak-tls", "plaintext"],
+        "severity_threshold": "high"
+      },
+      {
+        "id": "164.312(b)",
+        "name": "Audit Controls",
+        "description": "Implement hardware, software, and/or procedural mechanisms that record and examine activity in information systems that contain or use ePHI.",
+        "owasp_categories": ["A09"],
+        "cwe_ids": [223, 532, 778],
+        "nuclei_tags": ["log", "debug", "disclosure"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "164.312(c)(1)",
+        "name": "Integrity",
+        "description": "Implement policies and procedures to protect ePHI from improper alteration or destruction. Electronic measures must confirm that ePHI has not been altered or destroyed in an unauthorized manner.",
+        "owasp_categories": ["A08"],
+        "cwe_ids": [345, 354, 494],
+        "nuclei_tags": ["injection", "tamper", "integrity"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "164.312(d)",
+        "name": "Person or Entity Authentication",
+        "description": "Implement procedures to verify that a person or entity seeking access to ePHI is the one claimed. Multi-factor authentication should be used.",
+        "owasp_categories": ["A07"],
+        "cwe_ids": [284, 287, 306, 307, 521, 640],
+        "nuclei_tags": ["auth", "login", "mfa", "bypass", "default-login"],
+        "severity_threshold": "high"
+      },
+      {
+        "id": "164.312(e)(1)",
+        "name": "Transmission Security",
+        "description": "Implement technical security measures to guard against unauthorized access to ePHI that is being transmitted over an electronic communications network.",
+        "owasp_categories": ["A02"],
+        "cwe_ids": [295, 311, 319, 326, 327],
+        "nuclei_tags": ["ssl", "tls", "crypto", "weak-tls", "http"],
+        "severity_threshold": "high"
+      },
+      {
+        "id": "164.308(a)(1)(ii)(A)",
+        "name": "Risk Analysis",
+        "description": "Conduct an accurate and thorough assessment of the potential risks and vulnerabilities to the confidentiality, integrity, and availability of ePHI.",
+        "owasp_categories": ["A01", "A02", "A03", "A04", "A05", "A06", "A07"],
+        "cwe_ids": [],
+        "nuclei_tags": ["cve", "vuln", "owasp"],
+        "severity_threshold": "low"
+      },
+      {
+        "id": "164.308(a)(5)(ii)(B)",
+        "name": "Protection from Malicious Software",
+        "description": "Procedures for guarding against, detecting, and reporting malicious software.",
+        "owasp_categories": ["A08"],
+        "cwe_ids": [494, 507, 829],
+        "nuclei_tags": ["rce", "upload", "malware", "lfi", "rfi"],
+        "severity_threshold": "high"
+      },
+      {
+        "id": "164.308(a)(6)(ii)",
+        "name": "Response and Reporting",
+        "description": "Identify and respond to suspected or known security incidents; mitigate harmful effects of security incidents that are known to the covered entity.",
+        "owasp_categories": ["A09"],
+        "cwe_ids": [223, 778],
+        "nuclei_tags": ["exposure", "log", "debug"],
+        "severity_threshold": "medium"
+      }
+    ]
+  },
+  "soc2": {
+    "version": "2017",
+    "name": "SOC 2",
+    "description": "Service Organization Control 2 — Trust Services Criteria for security, availability, processing integrity, confidentiality, and privacy",
+    "requirements": [
+      {
+        "id": "CC6.1",
+        "name": "Logical and Physical Access Controls",
+        "description": "The entity implements logical access security software, infrastructure, and architectures over protected information assets to protect them from security events to meet the entity's objectives.",
+        "owasp_categories": ["A01", "A07"],
+        "cwe_ids": [284, 285, 287, 306],
+        "nuclei_tags": ["auth", "idor", "default-login", "panel", "bypass"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "CC6.2",
+        "name": "Prior to Issuing System Credentials",
+        "description": "Before issuing system credentials and granting system access, the entity registers and authorizes new internal and external users whose access is administered by the entity.",
+        "owasp_categories": ["A07"],
+        "cwe_ids": [287, 306, 521],
+        "nuclei_tags": ["auth", "registration", "default-login"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "CC6.3",
+        "name": "Role-Based Access Control",
+        "description": "The entity authorizes, modifies, or removes access to data, software, functions, and other protected information assets based on roles. Segregation of duties is enforced.",
+        "owasp_categories": ["A01"],
+        "cwe_ids": [269, 284, 285, 732],
+        "nuclei_tags": ["idor", "privilege-escalation", "auth", "bypass"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "CC6.6",
+        "name": "Logical Access Restrictions Over System Inputs",
+        "description": "Logical access security measures are implemented to protect against threats from sources outside its system boundaries. The entity implements controls to prevent logical access from outside its boundaries.",
+        "owasp_categories": ["A03", "A05"],
+        "cwe_ids": [89, 78, 79, 94],
+        "nuclei_tags": ["sqli", "xss", "injection", "rce", "misconfig"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "CC6.7",
+        "name": "Restriction of Unauthorized and Unencrypted Transmissions",
+        "description": "The entity restricts the transmission, movement, and removal of information to authorized internal and external users and processes, and protects it during transmission.",
+        "owasp_categories": ["A02"],
+        "cwe_ids": [311, 319, 326, 327],
+        "nuclei_tags": ["ssl", "tls", "crypto", "weak-tls"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "CC7.1",
+        "name": "Detection and Monitoring Procedures",
+        "description": "To meet its objectives, the entity uses detection and monitoring procedures to identify changes to configurations or the introduction of new vulnerabilities.",
+        "owasp_categories": ["A06", "A09"],
+        "cwe_ids": [],
+        "nuclei_tags": ["cve", "vuln", "misconfig"],
+        "severity_threshold": "low"
+      },
+      {
+        "id": "CC7.2",
+        "name": "Monitor System Components for Anomalous Behavior",
+        "description": "The entity monitors system components and the operation of those components for anomalies that are indicative of malicious acts, natural disasters, and errors affecting the entity's ability to meet its objectives.",
+        "owasp_categories": ["A09"],
+        "cwe_ids": [223, 532],
+        "nuclei_tags": ["debug", "log", "exposure"],
+        "severity_threshold": "low"
+      },
+      {
+        "id": "CC8.1",
+        "name": "Changes to Infrastructure, Data, and Software",
+        "description": "The entity authorizes, designs, develops or acquires, configures, documents, tests, approves, and implements changes to infrastructure, data, software, and procedures to meet its change management objectives.",
+        "owasp_categories": ["A06", "A08"],
+        "cwe_ids": [829, 494, 1104],
+        "nuclei_tags": ["outdated", "cve", "tech"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "CC9.2",
+        "name": "Vendor and Business Partner Management",
+        "description": "The entity assesses and manages risks associated with vendors and business partners prior to establishing a relationship with them and thereafter.",
+        "owasp_categories": ["A05", "A06"],
+        "cwe_ids": [1104, 829],
+        "nuclei_tags": ["supply-chain", "third-party", "cve", "outdated"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "P3.2",
+        "name": "Personal Information Collected from Third Parties",
+        "description": "Personal information is obtained from third parties only for the identified purposes, and the entity has procedures in place to verify that privacy notices and policies of third-party sources are consistent.",
+        "owasp_categories": ["A02", "A05"],
+        "cwe_ids": [311, 319, 200],
+        "nuclei_tags": ["exposure", "disclosure", "pii"],
+        "severity_threshold": "medium"
+      }
+    ]
+  },
+  "iso27001": {
+    "version": "2022",
+    "name": "ISO 27001",
+    "description": "International standard for information security management systems (ISMS)",
+    "requirements": [
+      {
+        "id": "A.8.8",
+        "name": "Management of technical vulnerabilities",
+        "description": "Information about technical vulnerabilities of information systems in use shall be obtained in a timely fashion, the organization's exposure to such vulnerabilities shall be evaluated, and appropriate measures taken.",
+        "owasp_categories": ["A06"],
+        "cwe_ids": [],
+        "nuclei_tags": ["cve", "vuln", "outdated"],
+        "severity_threshold": "low"
+      },
+      {
+        "id": "A.8.9",
+        "name": "Configuration management",
+        "description": "Configurations, including security configurations, of hardware, software, services and networks shall be established, documented, implemented, monitored and reviewed.",
+        "owasp_categories": ["A05"],
+        "cwe_ids": [16, 1008],
+        "nuclei_tags": ["misconfig", "exposure", "default-login", "panel"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "A.8.24",
+        "name": "Use of cryptography",
+        "description": "Rules for the effective use of cryptography, including cryptographic key management, shall be defined and implemented. Only approved and strong algorithms shall be used.",
+        "owasp_categories": ["A02"],
+        "cwe_ids": [310, 311, 319, 326, 327, 330],
+        "nuclei_tags": ["ssl", "tls", "crypto", "weak-tls", "weak-cipher"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "A.8.28",
+        "name": "Secure coding",
+        "description": "Secure coding principles shall be applied to software development. Applications shall be protected against known vulnerability classes in OWASP Top 10 and other authoritative sources.",
+        "owasp_categories": ["A03", "A04", "A05"],
+        "cwe_ids": [89, 79, 78, 94, 22, 611, 918, 352],
+        "nuclei_tags": ["sqli", "xss", "injection", "ssti", "xxe", "ssrf", "csrf"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "A.5.14",
+        "name": "Information transfer",
+        "description": "Information transfer rules, procedures, or agreements shall be in place for all types of transfer facilities within the organization and between the organization and other parties.",
+        "owasp_categories": ["A02"],
+        "cwe_ids": [295, 311, 319],
+        "nuclei_tags": ["ssl", "tls", "crypto", "http"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "A.8.3",
+        "name": "Information access restriction",
+        "description": "Access to information and other associated assets shall be restricted in accordance with the established topic-specific policy on access control.",
+        "owasp_categories": ["A01", "A07"],
+        "cwe_ids": [284, 285, 287, 306, 862, 863],
+        "nuclei_tags": ["auth", "idor", "bypass", "access-control"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "A.8.20",
+        "name": "Networks security",
+        "description": "Networks and network devices shall be secured, managed and controlled to protect information in systems and applications.",
+        "owasp_categories": ["A05"],
+        "cwe_ids": [16, 319],
+        "nuclei_tags": ["misconfig", "exposure", "network"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "A.8.23",
+        "name": "Web filtering",
+        "description": "Access to external websites shall be managed to reduce exposure to malicious content. Outbound connections to known malicious destinations shall be blocked.",
+        "owasp_categories": ["A10"],
+        "cwe_ids": [918, 441],
+        "nuclei_tags": ["ssrf", "redirect", "open-redirect"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "A.5.37",
+        "name": "Documented operating procedures",
+        "description": "Operating procedures for information processing facilities shall be documented and made available to personnel who need them.",
+        "owasp_categories": ["A05"],
+        "cwe_ids": [200, 209],
+        "nuclei_tags": ["exposure", "disclosure", "config"],
+        "severity_threshold": "low"
+      },
+      {
+        "id": "A.8.12",
+        "name": "Data leakage prevention",
+        "description": "Data leakage prevention measures shall be applied to systems, networks and any other devices that process, store or transmit sensitive information.",
+        "owasp_categories": ["A02", "A05"],
+        "cwe_ids": [200, 201, 209, 311, 538],
+        "nuclei_tags": ["exposure", "disclosure", "leak", "pii", "secret"],
+        "severity_threshold": "medium"
+      }
+    ]
+  },
+  "nist_csf": {
+    "version": "2.0",
+    "name": "NIST CSF",
+    "description": "NIST Cybersecurity Framework 2.0 — framework for managing and reducing cybersecurity risk",
+    "requirements": [
+      {
+        "id": "ID.RA-1",
+        "name": "Asset vulnerabilities are identified and documented",
+        "description": "Vulnerabilities in organizational systems and assets are identified, validated, and recorded.",
+        "owasp_categories": ["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10"],
+        "cwe_ids": [],
+        "nuclei_tags": ["owasp", "cve", "vuln", "misconfig"],
+        "severity_threshold": "info"
+      },
+      {
+        "id": "ID.RA-2",
+        "name": "Cyber threat intelligence is received",
+        "description": "The organization receives cyber threat intelligence from information sharing forums and sources.",
+        "owasp_categories": ["A06"],
+        "cwe_ids": [],
+        "nuclei_tags": ["cve", "tech", "fingerprint"],
+        "severity_threshold": "info"
+      },
+      {
+        "id": "PR.AA-1",
+        "name": "Identities and credentials for authorized users are managed",
+        "description": "Identities and credentials for authorized users, services, and hardware are managed by the organization.",
+        "owasp_categories": ["A07"],
+        "cwe_ids": [284, 287, 306, 521, 620],
+        "nuclei_tags": ["auth", "default-login", "weak-credentials", "jwt"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "PR.AA-3",
+        "name": "Users, services, and hardware are authenticated",
+        "description": "Users, services, and hardware are authenticated commensurate with the risk of the transaction.",
+        "owasp_categories": ["A07"],
+        "cwe_ids": [287, 306, 307, 384, 613],
+        "nuclei_tags": ["auth", "bypass", "mfa", "session"],
+        "severity_threshold": "high"
+      },
+      {
+        "id": "PR.AA-5",
+        "name": "Access permissions are managed",
+        "description": "Access permissions, entitlements, and authorizations are managed, incorporating the principles of least privilege and separation of duties.",
+        "owasp_categories": ["A01"],
+        "cwe_ids": [284, 285, 862, 863],
+        "nuclei_tags": ["idor", "auth", "bypass", "privilege-escalation"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "PR.DS-1",
+        "name": "Data-at-rest is protected",
+        "description": "Data-at-rest is protected commensurate with associated risks, using appropriate encryption and access controls.",
+        "owasp_categories": ["A02"],
+        "cwe_ids": [311, 326, 327],
+        "nuclei_tags": ["crypto", "exposure", "secret", "disclosure"],
+        "severity_threshold": "high"
+      },
+      {
+        "id": "PR.DS-2",
+        "name": "Data-in-transit is protected",
+        "description": "Data-in-transit is protected commensurate with associated risks, using appropriate encryption in transit.",
+        "owasp_categories": ["A02"],
+        "cwe_ids": [295, 311, 319, 326, 327],
+        "nuclei_tags": ["ssl", "tls", "crypto", "weak-tls", "http"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "DE.CM-1",
+        "name": "Networks and network services are monitored",
+        "description": "Networks and network services are monitored to find potentially adverse events.",
+        "owasp_categories": ["A05", "A09"],
+        "cwe_ids": [200, 223],
+        "nuclei_tags": ["exposure", "misconfig", "panel"],
+        "severity_threshold": "low"
+      },
+      {
+        "id": "RS.MA-2",
+        "name": "Incidents are triaged and validated",
+        "description": "Incidents are triaged and validated, prioritized, and categorized.",
+        "owasp_categories": ["A09"],
+        "cwe_ids": [223, 532, 778],
+        "nuclei_tags": ["debug", "log", "exposure"],
+        "severity_threshold": "low"
+      },
+      {
+        "id": "PR.PS-1",
+        "name": "Configuration management practices are established and applied",
+        "description": "Configuration management practices are established and applied. System configurations are assessed and any deviations from authorized configurations are detected.",
+        "owasp_categories": ["A05"],
+        "cwe_ids": [16, 1008],
+        "nuclei_tags": ["misconfig", "default-login", "panel", "exposure"],
+        "severity_threshold": "medium"
+      }
+    ]
+  },
+  "gdpr": {
+    "version": "2018",
+    "name": "GDPR",
+    "description": "General Data Protection Regulation — EU regulation on data protection and privacy for individuals within the EU and EEA",
+    "requirements": [
+      {
+        "id": "Art.32",
+        "name": "Security of processing",
+        "description": "Implement appropriate technical and organizational measures to ensure a level of security appropriate to the risk, including pseudonymization, encryption, confidentiality, integrity, and availability assurance.",
+        "owasp_categories": ["A02", "A05", "A07"],
+        "cwe_ids": [311, 319, 330],
+        "nuclei_tags": ["crypto", "misconfig", "auth", "ssl", "tls"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "Art.25",
+        "name": "Data protection by design and by default",
+        "description": "Both at the time of the determination of the means for processing and at the time of the processing itself, implement appropriate technical and organisational measures designed to implement data-protection principles.",
+        "owasp_categories": ["A01", "A02", "A05"],
+        "cwe_ids": [200, 311, 319],
+        "nuclei_tags": ["exposure", "disclosure", "leak", "crypto"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "Art.5(1)(f)",
+        "name": "Integrity and confidentiality",
+        "description": "Personal data shall be processed in a manner that ensures appropriate security, including protection against unauthorised or unlawful processing and against accidental loss, destruction or damage.",
+        "owasp_categories": ["A02", "A03", "A07"],
+        "cwe_ids": [89, 79, 284, 311, 319],
+        "nuclei_tags": ["sqli", "xss", "injection", "auth", "crypto"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "Art.33",
+        "name": "Notification of personal data breach",
+        "description": "In case of a personal data breach, the controller shall notify the supervisory authority within 72 hours. This requires detection and logging capabilities.",
+        "owasp_categories": ["A09"],
+        "cwe_ids": [223, 532, 778],
+        "nuclei_tags": ["debug", "log", "disclosure"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "Art.17",
+        "name": "Right to erasure",
+        "description": "The data subject shall have the right to obtain erasure of personal data and to prevent further processing. Systems must support deletion of personal data.",
+        "owasp_categories": ["A04"],
+        "cwe_ids": [200, 312],
+        "nuclei_tags": ["exposure", "disclosure", "pii"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "Art.22",
+        "name": "Automated individual decision-making",
+        "description": "The data subject shall have the right not to be subject to a decision based solely on automated processing, including profiling, which produces legal effects concerning them.",
+        "owasp_categories": ["A08"],
+        "cwe_ids": [],
+        "nuclei_tags": ["api", "graphql"],
+        "severity_threshold": "low"
+      },
+      {
+        "id": "Art.28",
+        "name": "Processor obligations",
+        "description": "Processing by a processor shall be governed by a contract providing sufficient guarantees about technical and organisational measures for GDPR compliance.",
+        "owasp_categories": ["A05", "A06"],
+        "cwe_ids": [1104, 829],
+        "nuclei_tags": ["third-party", "supply-chain", "cve"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "Art.32(1)(a)",
+        "name": "Pseudonymisation and encryption of personal data",
+        "description": "Technical measures shall include pseudonymisation and encryption of personal data where appropriate.",
+        "owasp_categories": ["A02"],
+        "cwe_ids": [311, 319, 326, 327],
+        "nuclei_tags": ["crypto", "ssl", "tls", "weak-tls", "plaintext"],
+        "severity_threshold": "high"
+      },
+      {
+        "id": "Art.32(1)(b)",
+        "name": "Ongoing confidentiality, integrity, availability",
+        "description": "Ensure the ongoing confidentiality, integrity, availability and resilience of processing systems and services.",
+        "owasp_categories": ["A01", "A02", "A03", "A07"],
+        "cwe_ids": [89, 79, 287, 311],
+        "nuclei_tags": ["sqli", "xss", "injection", "auth", "crypto", "misconfig"],
+        "severity_threshold": "medium"
+      },
+      {
+        "id": "Art.32(1)(d)",
+        "name": "Regular testing and evaluation",
+        "description": "A process for regularly testing, assessing and evaluating the effectiveness of technical and organisational measures for ensuring the security of processing.",
+        "owasp_categories": ["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10"],
+        "cwe_ids": [],
+        "nuclei_tags": ["owasp", "cve", "vuln"],
+        "severity_threshold": "info"
+      }
+    ]
+  }
+}
