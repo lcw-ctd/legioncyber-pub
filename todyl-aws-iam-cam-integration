@@ -1,0 +1,281 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Fully automates the Todyl AWS CloudTrail SIEM integration for a customer
+  ("Trusting") account: creates the CloudTrail trail, its S3 log bucket, the
+  KMS key used to encrypt it, the SQS queue that receives object-created
+  notifications, the S3->SQS event wiring, and the cross-account IAM role
+  that Todyl assumes to read the logs. Replaces the manual console steps in
+  Todyl's "Configuring AWS CloudTrail" and "Understanding AWS Cross-Account
+  IAM Roles" articles.
+
+Parameters:
+  TrustedAccountId:
+    Type: String
+    Description: AWS Account ID of the TRUSTED account (Account B - Todyl's AWS environment). Do not change unless Todyl tells you to.
+    AllowedPattern: "[0-9]{12}"
+    Default: "279994759858"
+
+  ExternalId:
+    Type: String
+    Description: >
+      External ID for the cross-account trust policy. Generate your own unique
+      value (a GUID is fine) - do NOT reuse a value from documentation or an
+      old template. You will paste this same value into the Todyl Portal.
+    NoEcho: true
+    MinLength: 8
+    AllowedPattern: "^\\S+$"
+    ConstraintDescription: "Must be a non-empty string with no whitespace, at least 8 characters."
+
+  RoleName:
+    Type: String
+    Default: aws-integration-role
+    Description: Name of the cross-account role Todyl will assume.
+
+  CloudTrailBucketName:
+    Type: String
+    Description: >
+      Globally-unique name for the new S3 bucket that will store CloudTrail
+      logs. Lowercase letters, numbers, periods, and hyphens only.
+    AllowedPattern: "^[a-z0-9][a-z0-9.\\-]{1,61}[a-z0-9]$"
+    ConstraintDescription: "Must be a valid, globally-unique, lowercase S3 bucket name."
+
+  SQSQueueName:
+    Type: String
+    Default: TodylCloudTrailSQS
+    Description: Name of the SQS queue that will receive S3 object-created notifications.
+
+  TrailName:
+    Type: String
+    Default: todylforwardtrail
+    AllowedPattern: "^[a-zA-Z0-9._-]{3,128}$"
+    Description: Name of the CloudTrail trail.
+
+  IsMultiRegionTrail:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Whether the trail should capture events from all regions (recommended).
+
+Conditions:
+  HasExternalId: !Not [!Equals [!Ref ExternalId, ""]]
+  MultiRegion: !Equals [!Ref IsMultiRegionTrail, "true"]
+
+Resources:
+
+  # ---------------------------------------------------------------------
+  # KMS key used to encrypt the CloudTrail log bucket
+  # ---------------------------------------------------------------------
+  CloudTrailKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Sub "KMS key for ${TrailName} CloudTrail log encryption"
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnableRootAccountFullAccess
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: "kms:*"
+            Resource: "*"
+          - Sid: AllowCloudTrailToEncryptLogs
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action:
+              - kms:GenerateDataKey*
+              - kms:Decrypt
+            Resource: "*"
+            Condition:
+              StringLike:
+                "kms:EncryptionContext:aws:cloudtrail:arn": !Sub "arn:aws:cloudtrail:*:${AWS::AccountId}:trail/*"
+          - Sid: AllowCloudTrailToDescribeKey
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: kms:DescribeKey
+            Resource: "*"
+
+  CloudTrailKMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${TrailName}-kms"
+      TargetKeyId: !Ref CloudTrailKMSKey
+
+  # ---------------------------------------------------------------------
+  # SQS queue that receives S3 "object created" notifications
+  # ---------------------------------------------------------------------
+  SQSQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Ref SQSQueueName
+      MessageRetentionPeriod: 604800   # 7 days, per Todyl's instructions
+      VisibilityTimeout: 30
+      SqsManagedSseEnabled: false      # matches "server-side encryption: disabled" in the doc
+
+  SQSQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref SQSQueue
+      PolicyDocument:
+        Version: "2012-10-17"
+        Id: __default_policy_ID
+        Statement:
+          - Sid: AllowS3ToSendMessages
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: SQS:SendMessage
+            Resource: !GetAtt SQSQueue.Arn
+            Condition:
+              ArnLike:
+                "aws:SourceArn": !Sub "arn:aws:s3:::${CloudTrailBucketName}"
+
+  # ---------------------------------------------------------------------
+  # S3 bucket that stores CloudTrail logs and notifies SQS on new objects
+  # ---------------------------------------------------------------------
+  CloudTrailBucket:
+    Type: AWS::S3::Bucket
+    DependsOn: SQSQueuePolicy   # S3 validates queue permissions at notification-config time
+    Properties:
+      BucketName: !Ref CloudTrailBucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref CloudTrailKMSKey
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: "s3:ObjectCreated:*"
+            Queue: !GetAtt SQSQueue.Arn
+
+  CloudTrailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref CloudTrailBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AWSCloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt CloudTrailBucket.Arn
+            Condition:
+              StringEquals:
+                "aws:SourceArn": !Sub "arn:aws:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}"
+          - Sid: AWSCloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub "${CloudTrailBucket.Arn}/AWSLogs/${AWS::AccountId}/*"
+            Condition:
+              StringEquals:
+                "s3:x-amz-acl": bucket-owner-full-control
+                "aws:SourceArn": !Sub "arn:aws:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}"
+
+  # ---------------------------------------------------------------------
+  # The CloudTrail trail itself
+  # ---------------------------------------------------------------------
+  CloudTrail:
+    Type: AWS::CloudTrail::Trail
+    DependsOn: CloudTrailBucketPolicy
+    Properties:
+      TrailName: !Ref TrailName
+      S3BucketName: !Ref CloudTrailBucket
+      KMSKeyId: !Ref CloudTrailKMSKey
+      IsLogging: true
+      IsMultiRegionTrail: !If [MultiRegion, true, false]
+      IncludeGlobalServiceEvents: true
+      EnableLogFileValidation: true
+      EventSelectors:
+        - ReadWriteType: All
+          IncludeManagementEvents: true
+
+  # ---------------------------------------------------------------------
+  # Cross-account role Todyl assumes to read S3 objects and SQS messages
+  # ---------------------------------------------------------------------
+  CrossAccountRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TrustedAccountId}:root"
+            Action: sts:AssumeRole
+            Condition: !If
+              - HasExternalId
+              - StringEquals:
+                  sts:ExternalId: !Ref ExternalId
+              - !Ref AWS::NoValue
+      Policies:
+        - PolicyName: TodylS3AndSQSAccessPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: TodylS3Access
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt CloudTrailBucket.Arn
+                  - !Sub "${CloudTrailBucket.Arn}/*"
+
+              - Sid: TodylSQSAccess
+                Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:GetQueueUrl
+                  - sqs:ChangeMessageVisibility
+                  - sqs:ListQueues
+                Resource: !GetAtt SQSQueue.Arn
+
+              - Sid: TodylKMSDecrypt
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !GetAtt CloudTrailKMSKey.Arn
+
+Outputs:
+  CrossAccountRoleArn:
+    Description: Paste this into the Todyl Portal as the "Role ARN"
+    Value: !GetAtt CrossAccountRole.Arn
+
+  SQSQueueUrl:
+    Description: Paste this into the Todyl Portal as the "Queue URL"
+    Value: !Ref SQSQueue
+
+  SQSQueueArn:
+    Description: ARN of the SQS queue (for your records / troubleshooting)
+    Value: !GetAtt SQSQueue.Arn
+
+  CloudTrailBucketName:
+    Description: Name of the CloudTrail log bucket
+    Value: !Ref CloudTrailBucket
+
+  CloudTrailBucketArn:
+    Description: ARN of the CloudTrail log bucket
+    Value: !GetAtt CloudTrailBucket.Arn
+
+  CloudTrailArn:
+    Description: ARN of the CloudTrail trail
+    Value: !GetAtt CloudTrail.Arn
+
+  KMSKeyArn:
+    Description: ARN of the KMS key used to encrypt CloudTrail logs
+    Value: !GetAtt CloudTrailKMSKey.Arn
